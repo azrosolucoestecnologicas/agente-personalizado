@@ -1,0 +1,47 @@
+# ============================================================
+#  CONFIGURAÇÃO DO ASSISTENTE: edite só este arquivo
+#  Depois de salvar na branch main, o site se atualiza sozinho.
+#
+#  Dicas:
+#   - Recue com 2 espaços (nunca TAB).
+#   - Cores SEMPRE entre aspas: "#0F2540"
+#   - Chaves de API NUNCA vão aqui: ficam nos secrets do Hugging Face.
+# ============================================================
+
+assistente:
+  nome: "Professor de Dados & IA"
+  descricao: "Tire suas dúvidas de Engenharia de Dados e Inteligência Artificial."
+
+aparencia:
+  cor_principal: "#0F2540"      # cor do topo do degradê
+  cor_secundaria: "#1E4D7A"     # opcional: cor do fim do degradê
+  logo: "assets/logo.png"       # a imagem precisa estar na pasta assets/
+  logo_altura: 80               # em pixels (24 a 300)
+
+ia:
+  provedores:                   # ordem de preferência: o 1º é tentado primeiro
+    - nome: openrouter
+      modelo: "google/gemma-4-31b-it:free"
+    - nome: anthropic
+      modelo: "claude-haiku-4-5"
+    - nome: openai
+      modelo: "gpt-5-mini"
+  max_tokens: 1024              # tamanho máximo da resposta (64 a 8192)
+  temperatura: 0.5              # 0.0 = mais preciso, 1.0 = mais criativo
+  tempo_limite_segundos: 30     # espera pela 1ª palavra antes de tentar o próximo
+  max_caracteres_pergunta: 2000 # perguntas maiores são recusadas (protege seus créditos)
+  max_mensagens_historico: 10   # quantas mensagens anteriores a IA "lembra"
+
+comportamento:
+  instrucoes: |
+    Você é um professor paciente e didático de Engenharia de Dados e IA.
+    Fala com alunos iniciantes e intermediários, sempre em português do Brasil.
+    Explique com exemplos simples e, quando útil, passo a passo.
+    Não responda assuntos fora de dados e IA; recuse com educação.
+    Não invente fatos: se não souber, diga que não sabe.
+
+exemplos:                       # até 6 perguntas; viram botões na tela
+  - "O que é um pipeline de dados?"
+  - "Qual a diferença entre data lake e data warehouse?"
+  - "Como funciona um modelo de linguagem?"
+  - "O que é ETL e ELT?"

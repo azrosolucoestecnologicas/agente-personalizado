@@ -1,0 +1,3 @@
+# Bibliotecas do app. Versões fixas para o build do Space ser previsível.
+# (A lista completa, com Gradio e SDKs de IA, chega nas tarefas 3 a 5.)
+PyYAML==6.0.2

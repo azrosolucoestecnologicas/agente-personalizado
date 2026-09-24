@@ -59,7 +59,7 @@ Publicar na internet um chat com IA, com um link público, que responde dúvidas
 
 | Camada | Escolha | Por quê |
 |---|---|---|
-| Linguagem | **Python** (3.12; confirmar na tarefa 1 se é a versão aceita pela ZeroGPU) | Padrão do Hugging Face e do Gradio. |
+| Linguagem | **Python 3.12** (confirmado: a ZeroGPU aceita 3.12.12 e 3.10.13) | Padrão do Hugging Face e do Gradio. |
 | Interface | **Gradio** (`gr.Blocks` + `gr.ChatInterface`), versão fixada | Pedido seu; é o SDK nativo dos Spaces e o único aceito pela ZeroGPU. |
 | Configuração | **YAML** (`config.yaml`) lido com `PyYAML` | Fácil de ler e editar pelo site do GitHub. |
 | IA: Anthropic | SDK oficial **`anthropic`** | Requisito. |
@@ -116,6 +116,7 @@ agente-personalizado/
 ├── app.py                       # Ponto de entrada: monta a tela e inicia o Gradio
 ├── requirements.txt             # Bibliotecas do app, com versões fixas
 ├── requirements-dev.txt         # Bibliotecas só para testes (pytest, ruff)
+├── pyproject.toml               # Configuração do pytest e do ruff
 ├── .gitignore                   # Impede subir .env, caches etc.
 ├── assets/
 │   └── logo.png                 # Logo (provisória até você enviar a sua)
@@ -144,7 +145,7 @@ agente-personalizado/
 ```
 
 **Vai para o Space:** `README.md`, `app.py`, `config.yaml`, `requirements.txt`, `assets/` e `agente/`.
-**Fica só no GitHub:** `tests/`, `scripts/`, `.github/`, `requirements-dev.txt` e os arquivos `.md` de ideia e spec.
+**Fica só no GitHub:** `tests/`, `scripts/`, `.github/`, `requirements-dev.txt`, `pyproject.toml` e os arquivos `.md` de ideia e spec.
 
 ---
 

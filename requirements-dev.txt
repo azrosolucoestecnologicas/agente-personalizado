@@ -1,0 +1,3 @@
+# Bibliotecas usadas só nos testes (não vão para o Space).
+-r requirements.txt
+pytest==8.3.5
