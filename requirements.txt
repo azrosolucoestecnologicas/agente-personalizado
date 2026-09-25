@@ -1,5 +1,7 @@
 # Bibliotecas do app. Versões fixas para o build do Space ser previsível.
-# (Gradio e o pacote da ZeroGPU chegam nas tarefas 4 e 5.)
+# A versão do Gradio precisa ser igual à 'sdk_version' do README.md (tarefa 5).
+gradio==6.28.0
+spaces==0.51.3
 PyYAML==6.0.2
 anthropic==1.8.0
 openai==3.19.2
