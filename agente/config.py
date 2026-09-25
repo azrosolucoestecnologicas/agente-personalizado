@@ -14,6 +14,8 @@ from typing import Any
 
 import yaml
 
+from agente.segredos import tem_chave
+
 RAIZ_PROJETO = Path(__file__).resolve().parent.parent
 ARQUIVO_PADRAO = RAIZ_PROJETO / "config.yaml"
 
@@ -23,8 +25,6 @@ PASTA_LOGO = "assets"
 TAMANHO_MAX_LOGO = 1024 * 1024  # 1 MB
 
 PADRAO_COR = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
-# Formatos típicos de chaves de API. Chave nunca pode ir no config.yaml.
-PADRAO_CHAVE = re.compile(r"(sk-or-|sk-ant-|sk-proj-|hf_)[A-Za-z0-9_\-]{8,}|sk-[A-Za-z0-9_\-]{20,}")
 
 # Estrutura esperada: nome do campo -> subcampos (dict) ou None (valor final).
 ESTRUTURA: dict[str, Any] = {
@@ -185,7 +185,7 @@ def _chaves_no_config(valor: Any, caminho: str) -> list[str]:
         return [e for k, v in valor.items() for e in _chaves_no_config(v, f"{caminho}{k}.")]
     if isinstance(valor, list):
         return [e for i, v in enumerate(valor) for e in _chaves_no_config(v, f"{caminho[:-1]}[{i}].")]
-    if isinstance(valor, str) and PADRAO_CHAVE.search(valor):
+    if isinstance(valor, str) and tem_chave(valor):
         return [
             f"❌ `{caminho[:-1]}`: parece conter uma chave de API. Chaves NUNCA vão no config.yaml: "
             "apague-a daqui, revogue-a no provedor e cadastre uma nova só nos secrets do Hugging Face."

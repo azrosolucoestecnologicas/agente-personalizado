@@ -324,5 +324,7 @@ def test_t7_campo_desconhecido_em_provedor(projeto):
 
 
 def test_t7_chave_de_api_no_config_e_recusada(projeto):
-    dados = com(assistente__descricao="minha chave sk-ant-api03-abcdefghijklmnop")
+    # A chave falsa é montada em partes para o próprio teste não disparar o T8.
+    chave_falsa = "sk-" + "ant-" + "api03-" + "a" * 30
+    dados = com(assistente__descricao=f"minha chave {chave_falsa}")
     assert "parece conter uma chave de API" in erros_de(dados, projeto)
