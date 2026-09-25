@@ -130,6 +130,7 @@ agente-personalizado/
 ├── scripts/
 │   ├── validar_config.py        # Valida o config.yaml e explica os erros em português
 │   ├── procurar_chaves.py       # Procura chaves de API esquecidas no código
+│   ├── perguntar.py             # Faz uma pergunta à IA pelo terminal (teste manual)
 │   └── publicar.py              # Envia os arquivos para o Space (usado pelo Actions)
 ├── tests/
 │   ├── test_config.py
@@ -256,7 +257,7 @@ exemplos:
   > • Anthropic (claude-haiku-4-5): sem crédito na conta (400/402).
 - **RF15.** Se nenhuma chave estiver cadastrada, a página abre normalmente e o chat responde: "Nenhuma chave de IA configurada. Cadastre OPENROUTER_API_KEY, ANTHROPIC_API_KEY ou OPENAI_API_KEY nos secrets do Space."
 - **RF16.** Nenhuma mensagem de erro, no chat ou no log, contém o valor de uma chave. Os erros passam por uma limpeza antes de aparecer.
-- **RF17.** `max_tokens`, `temperatura` e `instrucoes` são aplicados igualmente aos três provedores.
+- **RF17.** `max_tokens`, `temperatura` e `instrucoes` são aplicados igualmente aos três provedores. Se o modelo recusar `temperature` (caso de modelos mais novos, como Claude Sonnet 5 e GPT-5), o app repete o pedido sem esse parâmetro, antes de tentar o próximo provedor.
 
 ### Conversa e proteção de custo
 - **RF18.** As `instrucoes` são enviadas como mensagem de sistema. O histórico enviado à IA é limitado a `max_mensagens_historico`.

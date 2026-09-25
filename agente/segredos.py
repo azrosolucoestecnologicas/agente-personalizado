@@ -56,3 +56,13 @@ def procurar_em_texto(texto: str) -> list[Achado]:
 
 def tem_chave(texto: str) -> bool:
     return bool(procurar_em_texto(texto))
+
+
+def ocultar_chaves(texto: str, chaves: list[str] | tuple[str, ...] = ()) -> str:
+    """Troca por '[chave oculta]' as chaves conhecidas e tudo o que tiver formato de chave."""
+    for chave in chaves:
+        if chave:
+            texto = texto.replace(chave, "[chave oculta]")
+    for _, padrao in PADROES_CHAVE:
+        texto = padrao.sub("[chave oculta]", texto)
+    return texto
