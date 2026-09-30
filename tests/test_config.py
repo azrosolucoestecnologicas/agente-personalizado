@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -56,7 +57,11 @@ def test_config_do_projeto_e_valido():
 
 
 def test_validador_sai_com_codigo_0_quando_ok():
-    resultado = subprocess.run([sys.executable, "scripts/validar_config.py"], cwd=RAIZ, capture_output=True, text=True)
+    # Sem GITHUB_STEP_SUMMARY: o teste não deve escrever no resumo real do Actions.
+    ambiente = {k: v for k, v in os.environ.items() if k != "GITHUB_STEP_SUMMARY"}
+    resultado = subprocess.run(
+        [sys.executable, "scripts/validar_config.py"], cwd=RAIZ, capture_output=True, text=True, env=ambiente
+    )
     assert resultado.returncode == 0, resultado.stdout
     assert "✅" in resultado.stdout
 
