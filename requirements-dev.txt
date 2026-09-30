@@ -1,3 +1,4 @@
 # Bibliotecas usadas só nos testes (não vão para o Space).
 -r requirements.txt
-pytest==8.3.5
+pytest==9.1.1
+ruff==0.15.8

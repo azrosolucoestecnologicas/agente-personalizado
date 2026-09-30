@@ -291,7 +291,7 @@ Tudo roda no GitHub Actions **sem chaves reais e sem internet para os provedores
 | **T13** | Pergunta longa demais é recusada **sem** chamar a API | RF19. |
 | **T14** | Mensagens de erro e logs nunca contêm o valor da chave (teste com chave falsa) | RF16 e RF22. |
 | **T15** | Teste de fumaça: o app monta a tela sem chaves e sem rede, sem erro | Erros de importação ou de sintaxe que derrubariam o Space. |
-| **T16** | O cabeçalho do `README.md` está correto: `sdk: gradio`, `app_file: app.py` existe e `sdk_version` é igual à versão do Gradio no `requirements.txt` | Build quebrado no Hugging Face. |
+| **T16** | O cabeçalho do `README.md` está correto: `sdk: gradio`, `app_file: app.py` existe, `sdk_version` é igual à versão do Gradio no `requirements.txt`, `python_version` é aceita pela ZeroGPU, não há campos desconhecidos, as versões estão fixas (exceto `spaces`, que a ZeroGPU fornece) e toda biblioteca importada pelo app está no `requirements.txt` | Build quebrado no Hugging Face (`ModuleNotFoundError`, versão errada). |
 | **T17** | `ruff` sem erros | Código com erros óbvios. |
 
 Quando o portão falhar, o GitHub Actions escreve no **resumo da execução** (aba *Actions* → execução → *Summary*) a lista de problemas em português, por exemplo:

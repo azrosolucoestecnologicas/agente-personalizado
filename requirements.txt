@@ -1,7 +1,9 @@
 # Bibliotecas do app. Versões fixas para o build do Space ser previsível.
-# A versão do Gradio precisa ser igual à 'sdk_version' do README.md (tarefa 5).
+# A versão do gradio precisa ser igual à 'sdk_version' do README.md.
 gradio==6.28.0
-spaces==0.51.3
 PyYAML==6.0.2
 anthropic==1.8.0
 openai==3.19.2
+# 'spaces' fica sem versão: no hardware ZeroGPU o Hugging Face já traz a
+# versão certa, e fixar outra poderia atrapalhar.
+spaces
