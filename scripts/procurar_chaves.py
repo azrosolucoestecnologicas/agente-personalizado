@@ -1,8 +1,9 @@
 """Procura chaves de API esquecidas nos arquivos do projeto (verificação T8).
 
 Uso:
-    python scripts/procurar_chaves.py            # varre o projeto inteiro
+    python scripts/procurar_chaves.py              # varre o projeto inteiro
     python scripts/procurar_chaves.py outra/pasta
+    python scripts/procurar_chaves.py --historico  # varre TODO o histórico do Git
 
 O que é verificado:
   - todos os arquivos que vão (ou já foram) para o Git;
@@ -83,6 +84,31 @@ def procurar(pasta: Path) -> list[str]:
     return problemas
 
 
+def procurar_no_historico(pasta: Path) -> list[str]:
+    """Procura chaves em tudo o que já foi adicionado em qualquer commit de qualquer branch.
+
+    Uma chave apagada depois continua no histórico: por isso precisa ser revogada.
+    """
+    saida = subprocess.run(
+        ["git", "log", "--all", "-p", "--no-color", "--format=commit %h"],
+        cwd=pasta,
+        capture_output=True,
+        check=True,
+    ).stdout.decode("utf-8", errors="replace")
+    problemas, commit, arquivo = [], "?", "?"
+    for linha in saida.splitlines():
+        if linha.startswith("commit "):
+            commit = linha.split()[1]
+        elif linha.startswith("+++ b/"):
+            arquivo = linha[6:]
+            if eh_arquivo_env(Path(arquivo)):
+                problemas.append(f"commit {commit}, {arquivo}: arquivo .env já foi versionado.")
+        elif linha.startswith("+") and not linha.startswith("+++"):
+            for achado in procurar_em_texto(linha[1:]):
+                problemas.append(f"commit {commit}, {arquivo}: {achado.tipo} encontrada ({achado.trecho}).")
+    return problemas
+
+
 def escrever_resumo_actions(texto: str) -> None:
     resumo = os.environ.get("GITHUB_STEP_SUMMARY")
     if resumo:
@@ -98,10 +124,13 @@ O site publicado continua como estava."""
 
 
 def main(argv: list[str]) -> int:
-    pasta = Path(argv[1]).resolve() if len(argv) > 1 else RAIZ
-    problemas = procurar(pasta)
+    historico = "--historico" in argv
+    argumentos = [a for a in argv[1:] if a != "--historico"]
+    pasta = Path(argumentos[0]).resolve() if argumentos else RAIZ
+    problemas = procurar_no_historico(pasta) if historico else procurar(pasta)
+    onde = "no histórico do Git" if historico else "nos arquivos do projeto"
     if not problemas:
-        print("✅ Nenhuma chave de API encontrada nos arquivos do projeto.")
+        print(f"✅ Nenhuma chave de API encontrada {onde}.")
         escrever_resumo_actions("## ✅ Nenhuma chave de API encontrada")
         return 0
 

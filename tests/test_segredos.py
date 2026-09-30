@@ -149,3 +149,50 @@ def test_t8_em_repositorio_git_respeita_gitignore(tmp_path):
     resultado = rodar(tmp_path)
     assert resultado.returncode == 1
     assert ".env" in resultado.stdout
+
+
+def test_historico_acha_chave_que_foi_apagada_depois(tmp_path):
+    """A chave some do arquivo, mas continua no histórico: o modo --historico acha."""
+
+    def git(*args):
+        subprocess.run(["git", *args], cwd=tmp_path, check=True, capture_output=True)
+
+    git("init", "-q")
+    git("config", "user.email", "t@t")
+    git("config", "user.name", "t")
+    arquivo = tmp_path / "app.py"
+    arquivo.write_text(f'chave = "{CHAVES_FALSAS["chave da Anthropic"]}"\n', encoding="utf-8")
+    git("add", ".")
+    git("commit", "-qm", "ops")
+    arquivo.write_text('chave = os.environ["ANTHROPIC_API_KEY"]\n', encoding="utf-8")
+    git("commit", "-qam", "corrige")
+
+    assert rodar(tmp_path).returncode == 0  # os arquivos atuais estão limpos...
+    resultado = subprocess.run(
+        [sys.executable, str(SCRIPT), str(tmp_path), "--historico"],
+        capture_output=True, text=True, env={"PATH": "/usr/bin:/bin"},
+    )  # fmt: skip
+    assert resultado.returncode == 1  # ...mas o histórico não
+    assert "app.py: chave da Anthropic" in resultado.stdout
+    assert CHAVES_FALSAS["chave da Anthropic"] not in resultado.stdout
+
+
+def test_historico_do_projeto_esta_limpo():
+    resultado = subprocess.run([sys.executable, str(SCRIPT), "--historico"], cwd=RAIZ, capture_output=True, text=True)
+    assert resultado.returncode == 0, resultado.stdout
+
+
+def test_chave_falsa_conhecida_e_ignorada_so_pela_impressao_digital(monkeypatch):
+    from agente import segredos
+
+    chave = CHAVES_FALSAS["chave da OpenAI"]
+    assert segredos.tem_chave(chave)
+    monkeypatch.setitem(segredos.FALSAS_CONHECIDAS, segredos.impressao(chave), "teste")
+    assert not segredos.tem_chave(chave)
+    assert segredos.tem_chave(CHAVES_FALSAS["chave da Anthropic"])  # as outras continuam sendo pegas
+
+
+def test_lista_de_falsas_so_tem_hashes():
+    from agente.segredos import FALSAS_CONHECIDAS
+
+    assert all(len(h) == 64 and all(c in "0123456789abcdef" for c in h) for h in FALSAS_CONHECIDAS)

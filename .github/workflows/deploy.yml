@@ -23,6 +23,8 @@ jobs:
     steps:
       - name: Baixar o código
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # histórico completo, para procurar chaves em commits antigos
 
       - name: Instalar Python 3.12 (mesma versão do Space)
         uses: actions/setup-python@v6
@@ -42,6 +44,10 @@ jobs:
       - name: "T8: procurar chaves de API no código"
         if: ${{ !cancelled() }}
         run: python scripts/procurar_chaves.py
+
+      - name: "T8: procurar chaves no histórico do Git"
+        if: ${{ !cancelled() }}
+        run: python scripts/procurar_chaves.py --historico
 
       - name: "T17: estilo do código (ruff)"
         if: ${{ !cancelled() }}

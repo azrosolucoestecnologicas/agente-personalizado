@@ -5,6 +5,7 @@ Usado pela validação do config.yaml e pelo scripts/procurar_chaves.py.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass
 
@@ -21,6 +22,19 @@ PADROES_CHAVE: list[tuple[str, re.Pattern[str]]] = [
 # valor escrito direto no código, ex.: OPENAI_API_KEY = "abc123...".
 # Ler do ambiente (os.environ["OPENAI_API_KEY"]) não é pego.
 TIPO_ATRIBUICAO = "chave escrita direto no código"
+
+# Chaves FALSAS já conhecidas (de exemplos e testes antigos), guardadas só pela
+# impressão digital SHA-256, para a varredura não acusá-las. Nunca coloque aqui
+# o hash de uma chave de verdade: chave real vazada deve ser revogada.
+FALSAS_CONHECIDAS = {
+    "2c975580f00e5130cb4bf306d739321946a897cd8940d75da0908ea8159f929d": "exemplo de teste da tarefa 1 (alfabeto em ordem)",
+}
+
+
+def impressao(valor: str) -> str:
+    return hashlib.sha256(valor.encode("utf-8")).hexdigest()
+
+
 _ATRIBUICAO = re.compile(
     r"(?:OPENROUTER_API_KEY|ANTHROPIC_API_KEY|OPENAI_API_KEY|HF_TOKEN)[\"']?\s*[:=]\s*[\"']?([A-Za-z0-9_\-]{16,})"
 )
@@ -46,11 +60,13 @@ def procurar_em_texto(texto: str) -> list[Achado]:
             if any(ini <= m.start() < fim for ini, fim in ocupados):
                 continue  # já contado por um padrão mais específico
             ocupados.append(m.span())
-            achados.append(Achado(tipo, mascarar(m.group(0))))
+            if impressao(m.group(0)) not in FALSAS_CONHECIDAS:
+                achados.append(Achado(tipo, mascarar(m.group(0))))
     for m in _ATRIBUICAO.finditer(texto):
         if any(ini <= m.start(1) < fim for ini, fim in ocupados):
             continue
-        achados.append(Achado(TIPO_ATRIBUICAO, mascarar(m.group(1))))
+        if impressao(m.group(1)) not in FALSAS_CONHECIDAS:
+            achados.append(Achado(TIPO_ATRIBUICAO, mascarar(m.group(1))))
     return achados
 
 
