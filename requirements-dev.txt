@@ -2,3 +2,4 @@
 -r requirements.txt
 pytest==9.1.1
 ruff==0.15.8
+huggingface_hub==1.33.0   # mesma versão usada no job "publicar" do GitHub Actions

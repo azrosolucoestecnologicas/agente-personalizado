@@ -350,7 +350,7 @@ Detalhes:
 5. Criar um token de acesso: *Settings da conta → Access Tokens → Create new token* → tipo **Fine-grained**, com permissão de **escrita** só no Space `thiagoazro/agente-personalizado`. Copie o token (começa com `hf_`).
 
 **No GitHub** (repositório `azrosolucoestecnologicas/agente-personalizado`)
-6. *Settings → Secrets and variables → Actions → New repository secret* → nome `HF_TOKEN`, valor = token do passo 5.
+6. *Settings → Secrets and variables → Actions → New repository secret* → nome `HF_TOKEN`, valor = token do passo 5. (Opcional: na aba *Variables*, crie `HF_SPACE` para publicar em outro Space; o padrão é `thiagoazro/agente-personalizado`.)
 7. Conferir se a branch padrão é `main` e se o GitHub Actions está habilitado (*Settings → Actions → General*).
 8. **Recomendado:** *Settings → Code security* → ativar **Secret scanning** e **Push protection** (o GitHub bloqueia o push se detectar uma chave). Isso é uma segunda camada além do T8.
 9. **Recomendado:** *Settings → Branches* → regra para `main` exigindo que o check **"testes"** passe antes de fazer merge.

@@ -1,0 +1,82 @@
+# Portão de testes + publicação no Hugging Face Spaces.
+#
+# - Em QUALQUER branch e em pull requests: roda todas as verificações.
+# - Só em push na branch main: se tudo passar, publica no Space.
+# Se algo falhar, nada é publicado e o site antigo continua no ar.
+# O que corrigir aparece na execução → aba "Summary".
+
+name: Testar e publicar
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch: # botão "Run workflow" na aba Actions
+
+permissions:
+  contents: read
+
+jobs:
+  testes:
+    name: testes
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+
+      - name: Instalar Python 3.12 (mesma versão do Space)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Instalar bibliotecas
+        run: pip install -r requirements-dev.txt
+
+      # "!cancelled()" faz as verificações seguintes rodarem mesmo se uma
+      # anterior falhar, para você ver TODOS os problemas de uma vez.
+      - name: "T1–T7: conferir o config.yaml"
+        run: python scripts/validar_config.py
+
+      - name: "T8: procurar chaves de API no código"
+        if: ${{ !cancelled() }}
+        run: python scripts/procurar_chaves.py
+
+      - name: "T17: estilo do código (ruff)"
+        if: ${{ !cancelled() }}
+        run: ruff check . --output-format=github
+
+      - name: "T1–T17: testes automáticos"
+        if: ${{ !cancelled() }}
+        run: python -m pytest -q
+
+  publicar:
+    name: publicar
+    needs: testes
+    # Só publica a partir da main (push ou botão manual), nunca em pull requests.
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # Uma publicação por vez; se vierem duas seguidas, a segunda espera.
+    concurrency:
+      group: publicar-space
+      cancel-in-progress: false
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+
+      - name: Instalar Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar a biblioteca do Hugging Face
+        run: pip install "huggingface_hub==1.33.0"
+
+      - name: Enviar para o Space e acompanhar o build
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          # Opcional: crie a variável HF_SPACE no GitHub para usar outro Space.
+          HF_SPACE: ${{ vars.HF_SPACE }}
+        run: python scripts/publicar.py
