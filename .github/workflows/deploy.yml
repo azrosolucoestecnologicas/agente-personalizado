@@ -51,6 +51,31 @@ jobs:
         if: ${{ !cancelled() }}
         run: python -m pytest -q
 
+  # Botão "Run workflow" fora da main: só CONFERE a configuração do
+  # Hugging Face (Space, token, hardware, secrets). Não publica nada.
+  conferir:
+    name: conferir configuração
+    if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v5
+
+      - name: Instalar Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Instalar a biblioteca do Hugging Face
+        run: pip install "huggingface_hub==1.33.0"
+
+      - name: Conferir Space, token, hardware e secrets
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE: ${{ vars.HF_SPACE }}
+        run: python scripts/publicar.py --conferir
+
   publicar:
     name: publicar
     needs: testes

@@ -7,7 +7,8 @@ Variáveis de ambiente:
     HF_SPACE   nome do Space; padrão: thiagoazro/agente-personalizado
 
 Uso manual (raramente necessário):
-    HF_TOKEN=hf_... python scripts/publicar.py
+    HF_TOKEN=hf_... python scripts/publicar.py              # confere e publica
+    HF_TOKEN=hf_... python scripts/publicar.py --conferir   # só confere a configuração
 """
 
 from __future__ import annotations
@@ -104,42 +105,123 @@ def aguardar_build(
     return True, f"publicado, mas o build ainda não terminou em {limite_segundos // 60} min (último estado: {estagio})"
 
 
-def main() -> int:
+VARIAVEIS_DE_CHAVE = ("OPENROUTER_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY")
+
+
+def _explicar_erro_http(erro, space: str) -> str:
+    from huggingface_hub.errors import RepositoryNotFoundError
+
+    if isinstance(erro, RepositoryNotFoundError):
+        return (
+            f"Space `{space}` não encontrado, ou o HF_TOKEN não tem acesso a ele. "
+            "Crie o Space (SDK Gradio) ou confira o nome e as permissões do token."
+        )
+    status = getattr(getattr(erro, "response", None), "status_code", "?")
+    if status == 401:
+        return "HF_TOKEN inválido ou expirado (401). Gere um novo token e atualize o secret no GitHub."
+    if status == 403:
+        return "O HF_TOKEN não tem permissão de ESCRITA neste Space (403). Gere um token com escrita."
+    return f"O Hugging Face respondeu com erro ({status}). Tente de novo em alguns minutos."
+
+
+def conferir(api, space: str) -> tuple[list[str], list[str], list[str]]:
+    """Confere a configuração manual (spec 7.2). Devolve (erros, avisos, itens ok).
+
+    Só lê NOMES de secrets; os valores nunca podem ser lidos.
+    """
+    from huggingface_hub.errors import HfHubHTTPError
+
+    erros: list[str] = []
+    avisos: list[str] = []
+    ok: list[str] = []
+    try:
+        api.auth_check(space, repo_type="space", write=True)
+        ok.append(f"Space `{space}` existe e o HF_TOKEN tem permissão de escrita")
+    except HfHubHTTPError as erro:
+        return [_explicar_erro_http(erro, space)], avisos, ok
+
+    info = api.space_info(space)
+    if info.sdk == "gradio":
+        ok.append("SDK do Space: Gradio")
+    else:
+        erros.append(f"O Space foi criado com o SDK '{info.sdk}'. Ele precisa ser Gradio: crie o Space de novo.")
+
+    runtime = getattr(info, "runtime", None)
+    hardware = str(getattr(runtime, "requested_hardware", None) or getattr(runtime, "hardware", None) or "")
+    if "zero" in hardware:
+        ok.append(f"Hardware: ZeroGPU ({hardware})")
+    else:
+        avisos.append(
+            f"Hardware atual: '{hardware or 'ainda não definido'}'. Para ZeroGPU: Settings → Space hardware "
+            "(exige conta PRO). O app funciona igual em CPU."
+        )
+
+    try:
+        secrets = set(api.get_space_secrets(space))
+        variaveis = set(api.get_space_variables(space))
+    except HfHubHTTPError:
+        avisos.append("Não consegui listar os secrets do Space; confira à mão em Settings → Variables and secrets.")
+        return erros, avisos, ok
+
+    expostas = sorted(variaveis & set(VARIAVEIS_DE_CHAVE))
+    if expostas:
+        erros.append(
+            f"{', '.join(expostas)} foi cadastrada como VARIABLE (fica visível para todos!). "
+            "Apague-a, REVOGUE a chave no provedor e cadastre uma nova como SECRET."
+        )
+    presentes = [nome for nome in VARIAVEIS_DE_CHAVE if nome in secrets]
+    if presentes:
+        ok.append(f"Chaves de IA cadastradas como secret: {', '.join(presentes)}")
+    elif not expostas:
+        avisos.append(
+            "Nenhuma chave de IA nos secrets do Space: o chat vai abrir, mas só vai pedir para cadastrar "
+            "OPENROUTER_API_KEY, ANTHROPIC_API_KEY ou OPENAI_API_KEY."
+        )
+    return erros, avisos, ok
+
+
+def relatorio(erros: list[str], avisos: list[str], ok: list[str]) -> str:
+    linhas = ["### Conferência da configuração", ""]
+    linhas += [f"- ✅ {item}" for item in ok]
+    linhas += [f"- ⚠️ {item}" for item in avisos]
+    linhas += [f"- ❌ {item}" for item in erros]
+    return "\n".join(linhas) + "\n"
+
+
+def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    so_conferir = "--conferir" in argv
     token = os.environ.get("HF_TOKEN", "").strip()
     space = os.environ.get("HF_SPACE", "").strip() or SPACE_PADRAO
     link_space = f"https://huggingface.co/spaces/{space}"
     if not token:
         escrever_resumo(
-            "## ❌ Publicação não feita: falta o secret HF_TOKEN\n\n"
+            "## ❌ Falta o secret HF_TOKEN no GitHub\n\n"
             "No GitHub: Settings → Secrets and variables → Actions → New repository secret → "
             "nome `HF_TOKEN`, valor = token do Hugging Face com permissão de escrita no Space."
         )
         return 1
 
     from huggingface_hub import HfApi
-    from huggingface_hub.errors import HfHubHTTPError, RepositoryNotFoundError
+    from huggingface_hub.errors import HfHubHTTPError
 
     api = HfApi(token=token)
+    erros, avisos, ok = conferir(api, space)
+    escrever_resumo(relatorio(erros, avisos, ok))
+    if erros:
+        escrever_resumo("## ❌ Configuração incompleta: nada foi publicado. Corrija os itens com ❌.")
+        return 1
+    if so_conferir:
+        escrever_resumo("## ✅ Configuração pronta para publicar")
+        return 0
+
     print(f"Enviando para {space}:")
     for arquivo in arquivos_para_publicar():
         print(f"   {arquivo}")
     try:
         commit = enviar(api, space)
-    except RepositoryNotFoundError:
-        escrever_resumo(
-            f"## ❌ Space `{space}` não encontrado\n\n"
-            "Crie o Space no Hugging Face (SDK Gradio) ou confira o nome. "
-            "Se ele existe, o HF_TOKEN pode não ter acesso a ele."
-        )
-        return 1
     except HfHubHTTPError as erro:
-        status = getattr(erro.response, "status_code", "?")
-        dica = (
-            "O HF_TOKEN está inválido, expirado ou sem permissão de escrita neste Space. Gere um novo token."
-            if status in (401, 403)
-            else "Tente rodar o job de novo em alguns minutos."
-        )
-        escrever_resumo(f"## ❌ O Hugging Face recusou o envio ({status})\n\n{dica}")
+        escrever_resumo(f"## ❌ O Hugging Face recusou o envio\n\n{_explicar_erro_http(erro, space)}")
         return 1
 
     link_commit = getattr(commit, "commit_url", "")

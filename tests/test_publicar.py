@@ -68,6 +68,13 @@ def test_publicar_so_depois_dos_testes_e_so_na_main(workflow):
     assert "python scripts/publicar.py" in _comandos(job)
 
 
+def test_botao_manual_fora_da_main_so_confere(workflow):
+    job = workflow["jobs"]["conferir"]
+    assert "workflow_dispatch" in job["if"] and "refs/heads/main" in job["if"]
+    assert "python scripts/publicar.py --conferir" in _comandos(job)
+    assert "upload" not in _comandos(job)
+
+
 def test_token_vem_do_secret_e_nao_do_codigo(workflow):
     passo = next(p for p in workflow["jobs"]["publicar"]["steps"] if "publicar.py" in p.get("run", ""))
     assert passo["env"]["HF_TOKEN"] == "${{ secrets.HF_TOKEN }}"
@@ -82,9 +89,11 @@ def test_python_do_ci_igual_ao_do_space(workflow):
 
 
 def test_versao_do_huggingface_hub_igual_no_ci_e_nos_testes(workflow):
-    no_ci = re.search(r"huggingface_hub==([\d.]+)", _comandos(workflow["jobs"]["publicar"]))[1]
+    no_ci = {
+        re.search(r"huggingface_hub==([\d.]+)", _comandos(workflow["jobs"][j]))[1] for j in ("publicar", "conferir")
+    }
     nos_testes = re.search(r"huggingface_hub==([\d.]+)", (RAIZ / "requirements-dev.txt").read_text("utf-8"))[1]
-    assert no_ci == nos_testes
+    assert no_ci == {nos_testes}
 
 
 # ------------------------------------------------ o que vai para o Space
@@ -174,6 +183,99 @@ def test_estado_como_enum_do_huggingface_hub():
     assert aguardar(api) == (True, "no ar (RUNNING)")
 
 
+# ------------------------------------ conferência da configuração manual
+
+
+class HfFalso:
+    """Hugging Face simulado, configurável por teste."""
+
+    def __init__(
+        self,
+        erro_acesso=None,
+        sdk="gradio",
+        hardware="zero-a10g",
+        secrets=("OPENROUTER_API_KEY",),
+        variaveis=(),
+        erro_envio=None,
+    ):
+        self.erro_acesso, self.sdk, self.hardware = erro_acesso, sdk, hardware
+        self.secrets, self.variaveis, self.erro_envio = secrets, variaveis, erro_envio
+        self.enviou = False
+
+    def auth_check(self, repo_id, repo_type=None, write=False):
+        assert repo_type == "space" and write is True
+        if self.erro_acesso:
+            raise self.erro_acesso
+
+    def space_info(self, _):
+        runtime = SimpleNamespace(hardware=self.hardware, requested_hardware=self.hardware)
+        return SimpleNamespace(sdk=self.sdk, runtime=runtime)
+
+    def get_space_secrets(self, _):
+        return {nome: object() for nome in self.secrets}
+
+    def get_space_variables(self, _):
+        return {nome: object() for nome in self.variaveis}
+
+    def upload_folder(self, **_):
+        if self.erro_envio:
+            raise self.erro_envio
+        self.enviou = True
+        return SimpleNamespace(oid="n", commit_url="https://hf/c/n")
+
+    def get_space_runtime(self, _):
+        return SimpleNamespace(stage="RUNNING", raw={"sha": "n"})
+
+
+def _erro_http(classe, status):
+    resposta = httpx.Response(status, request=httpx.Request("POST", "https://huggingface.co/api"))
+    return classe("erro", response=resposta)
+
+
+def test_conferencia_tudo_certo():
+    erros, avisos, ok = publicar.conferir(HfFalso(), "u/s")
+    assert erros == [] and avisos == []
+    assert any("permissão de escrita" in item for item in ok)
+    assert any("ZeroGPU" in item for item in ok)
+    assert any("OPENROUTER_API_KEY" in item for item in ok)
+
+
+@pytest.mark.parametrize("status,esperado", [(401, "inválido ou expirado"), (403, "permissão de ESCRITA")])
+def test_conferencia_token_ruim(status, esperado):
+    from huggingface_hub.errors import HfHubHTTPError
+
+    erros, _, _ = publicar.conferir(HfFalso(erro_acesso=_erro_http(HfHubHTTPError, status)), "u/s")
+    assert esperado in erros[0]
+
+
+def test_conferencia_space_inexistente():
+    from huggingface_hub.errors import RepositoryNotFoundError
+
+    erros, _, _ = publicar.conferir(HfFalso(erro_acesso=_erro_http(RepositoryNotFoundError, 404)), "fulano/x")
+    assert "`fulano/x` não encontrado" in erros[0]
+
+
+def test_conferencia_sdk_errado():
+    erros, _, _ = publicar.conferir(HfFalso(sdk="docker"), "u/s")
+    assert "precisa ser Gradio" in erros[0]
+
+
+def test_conferencia_sem_zerogpu_e_so_aviso():
+    erros, avisos, _ = publicar.conferir(HfFalso(hardware="cpu-basic"), "u/s")
+    assert erros == [] and "cpu-basic" in avisos[0]
+
+
+def test_conferencia_sem_chave_de_ia_e_so_aviso():
+    erros, avisos, _ = publicar.conferir(HfFalso(secrets=()), "u/s")
+    assert erros == [] and "Nenhuma chave de IA" in avisos[0]
+
+
+def test_conferencia_chave_cadastrada_como_variable_bloqueia():
+    erros, _, _ = publicar.conferir(HfFalso(secrets=(), variaveis=("OPENAI_API_KEY",)), "u/s")
+    assert "OPENAI_API_KEY foi cadastrada como VARIABLE" in erros[0]
+    assert "REVOGUE" in erros[0]
+
+
 # --------------------------------------------------------------- main()
 
 
@@ -184,72 +286,49 @@ def resumo(tmp_path, monkeypatch) -> Path:
     return arquivo
 
 
+@pytest.fixture
+def hf(monkeypatch):
+    """Troca o HfApi de verdade por um HfFalso (configurável em cada teste)."""
+    estado = {"api": HfFalso()}
+    monkeypatch.setenv("HF_TOKEN", "token-de-teste")
+    monkeypatch.delenv("HF_SPACE", raising=False)
+    monkeypatch.setattr("huggingface_hub.HfApi", lambda token: estado["api"])
+    monkeypatch.setattr(publicar.time, "sleep", lambda _s: None)
+    return estado
+
+
 def test_sem_hf_token_explica_o_que_fazer(monkeypatch, resumo):
     monkeypatch.delenv("HF_TOKEN", raising=False)
-    assert publicar.main() == 1
-    assert "falta o secret HF_TOKEN" in resumo.read_text("utf-8")
+    assert publicar.main([]) == 1
+    assert "Falta o secret HF_TOKEN" in resumo.read_text("utf-8")
 
 
-def _erro_http(classe, status):
-    resposta = httpx.Response(status, request=httpx.Request("POST", "https://huggingface.co/api"))
-    return classe("erro", response=resposta)
+def test_so_conferir_nao_envia_nada(hf, resumo):
+    assert publicar.main(["--conferir"]) == 0
+    assert hf["api"].enviou is False
+    assert "Configuração pronta para publicar" in resumo.read_text("utf-8")
 
 
-@pytest.mark.parametrize(
-    "status,esperado",
-    [(401, "HF_TOKEN está inválido"), (403, "sem permissão de escrita"), (500, "Tente rodar o job de novo")],
-)
-def test_envio_recusado_explica_o_motivo(status, esperado, monkeypatch, resumo):
+def test_configuracao_com_erro_nao_publica(hf, resumo):
+    hf["api"] = HfFalso(sdk="static")
+    assert publicar.main([]) == 1
+    assert hf["api"].enviou is False
+    assert "nada foi publicado" in resumo.read_text("utf-8")
+
+
+@pytest.mark.parametrize("status,esperado", [(403, "permissão de ESCRITA"), (500, "Tente de novo")])
+def test_envio_recusado_explica_o_motivo(status, esperado, hf, resumo):
     from huggingface_hub.errors import HfHubHTTPError
 
-    class ApiFalsa:
-        def __init__(self, token):
-            pass
-
-        def upload_folder(self, **_):
-            raise _erro_http(HfHubHTTPError, status)
-
-    monkeypatch.setenv("HF_TOKEN", "token-de-teste")
-    monkeypatch.setattr("huggingface_hub.HfApi", ApiFalsa)
-    assert publicar.main() == 1
+    hf["api"] = HfFalso(erro_envio=_erro_http(HfHubHTTPError, status))
+    assert publicar.main([]) == 1
     texto = resumo.read_text("utf-8")
-    assert f"({status})" in texto and esperado in texto
-    assert "token-de-teste" not in texto
+    assert esperado in texto and "token-de-teste" not in texto
 
 
-def test_space_inexistente(monkeypatch, resumo):
-    from huggingface_hub.errors import RepositoryNotFoundError
-
-    class ApiFalsa:
-        def __init__(self, token):
-            pass
-
-        def upload_folder(self, **_):
-            raise _erro_http(RepositoryNotFoundError, 404)
-
-    monkeypatch.setenv("HF_TOKEN", "t")
-    monkeypatch.setenv("HF_SPACE", "fulano/nao-existe")
-    monkeypatch.setattr("huggingface_hub.HfApi", ApiFalsa)
-    assert publicar.main() == 1
-    assert "`fulano/nao-existe` não encontrado" in resumo.read_text("utf-8")
-
-
-def test_publicacao_completa_com_sucesso(monkeypatch, resumo):
-    class ApiFalsa:
-        def __init__(self, token):
-            pass
-
-        def upload_folder(self, **_):
-            return SimpleNamespace(oid="n", commit_url="https://hf/c/n")
-
-        def get_space_runtime(self, _):
-            return SimpleNamespace(stage="RUNNING", raw={"sha": "n"})
-
-    monkeypatch.setenv("HF_TOKEN", "t")
-    monkeypatch.delenv("HF_SPACE", raising=False)
-    monkeypatch.setattr("huggingface_hub.HfApi", ApiFalsa)
-    monkeypatch.setattr(publicar.time, "sleep", lambda _s: None)
-    assert publicar.main() == 0
+def test_publicacao_completa_com_sucesso(hf, resumo):
+    assert publicar.main([]) == 0
+    assert hf["api"].enviou is True
     texto = resumo.read_text("utf-8")
     assert "✅ Publicado" in texto
     assert "https://huggingface.co/spaces/thiagoazro/agente-personalizado" in texto
