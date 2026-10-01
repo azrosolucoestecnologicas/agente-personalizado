@@ -48,6 +48,7 @@ TEXTOS_INTERNOS_PT = {
 }
 
 TEXTO_ESCURO = "#111827"
+TEXTO_PRATA = "#D9DDE2"  # prata claro para textos secundários sobre fundo escuro
 TEXTO_CLARO = "#FFFFFF"
 
 
@@ -116,6 +117,10 @@ def montar_cabecalho(config: Config) -> str:
 def montar_css(config: Config) -> str:
     """RF4: fundo com as cores do config; cartão do chat sempre claro e legível."""
     texto = cor_do_texto(config.cor_principal, config.cor_secundaria)
+    # Sobre fundo escuro, a descrição fica num prata claro; sobre fundo claro, igual ao nome.
+    texto_descricao = TEXTO_PRATA if texto == TEXTO_CLARO else texto
+    destaque = config.cor_destaque or config.cor_principal
+    texto_destaque = cor_do_texto(destaque)
     return f"""
 body, gradio-app, .gradio-container, .main, .app {{
   background: linear-gradient(160deg, {config.cor_principal} 0%, {config.cor_secundaria} 100%) fixed !important;
@@ -124,12 +129,13 @@ footer {{ opacity: .75; }}
 footer, footer * {{ color: {texto} !important; }}
 .gradio-container {{ max-width: 920px !important; margin: 0 auto !important; }}
 .cabecalho {{
-  display: flex; align-items: center; gap: 18px; padding: 20px 8px 12px;
+  display: flex; align-items: center; gap: 18px; padding: 20px 8px 14px; margin-bottom: 14px;
   color: {texto};
+  border-bottom: 3px solid {destaque};
 }}
-.cabecalho-logo {{ width: auto; max-width: 40vw; object-fit: contain; flex-shrink: 0; }}
+.cabecalho-logo {{ width: auto; max-width: 40vw; object-fit: contain; flex-shrink: 0; border-radius: 10px; }}
 .cabecalho-nome {{ margin: 0; font-size: 1.9rem; line-height: 1.2; color: {texto} !important; }}
-.cabecalho-descricao {{ margin: 6px 0 0; font-size: 1.05rem; opacity: .92; color: {texto} !important; }}
+.cabecalho-descricao {{ margin: 6px 0 0; font-size: 1.05rem; color: {texto_descricao} !important; }}
 @media (max-width: 600px) {{
   .cabecalho {{ flex-direction: column; text-align: center; }}
   .cabecalho-nome {{ font-size: 1.5rem; }}
@@ -162,7 +168,7 @@ footer, footer * {{ color: {texto} !important; }}
 .cartao-chat .user, .cartao-chat .user * {{ color: {cor_do_texto(config.cor_principal)} !important; }}
 .cartao-chat {{ width: 100% !important; }}
 
-/* Perguntas de exemplo: botões visíveis, com a cor principal ao passar o mouse. */
+/* Perguntas de exemplo: botões visíveis, com a cor de destaque ao passar o mouse. */
 .cartao-chat button.example {{
   background: #F3F4F6 !important;
   border: 1px solid #E5E7EB !important;
@@ -171,14 +177,14 @@ footer, footer * {{ color: {texto} !important; }}
 }}
 .cartao-chat button.example:hover {{
   background: #FFFFFF !important;
-  border-color: {config.cor_principal} !important;
+  border-color: {destaque} !important;
 }}
 .cartao-chat button.example * {{ color: {TEXTO_ESCURO} !important; }}
 
-/* Botões Enviar/Parar com a cor principal. */
+/* Botões Enviar/Parar com a cor de destaque. */
 .cartao-chat button.submit-button, .cartao-chat button.stop-button {{
-  background: {config.cor_principal} !important;
-  color: {cor_do_texto(config.cor_principal)} !important;
+  background: {destaque} !important;
+  color: {texto_destaque} !important;
   border-radius: 999px !important;
   padding: 6px 18px !important;
 }}
@@ -189,12 +195,12 @@ footer, footer * {{ color: {texto} !important; }}
 
 
 def tema(config: Config) -> gr.themes.Base:
-    texto_botao = cor_do_texto(config.cor_principal)
+    destaque = config.cor_destaque or config.cor_principal
     return gr.themes.Soft().set(
-        button_primary_background_fill=config.cor_principal,
-        button_primary_background_fill_hover=config.cor_secundaria,
-        button_primary_text_color=texto_botao,
-        button_primary_border_color=config.cor_principal,
+        button_primary_background_fill=destaque,
+        button_primary_background_fill_hover=config.cor_principal,
+        button_primary_text_color=cor_do_texto(destaque),
+        button_primary_border_color=destaque,
     )
 
 

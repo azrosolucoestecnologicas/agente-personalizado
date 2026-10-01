@@ -45,7 +45,7 @@ def main(argv: list[str]) -> int:
     mensagem = (
         f"✅ {caminho.name} está correto.\n"
         f"   Assistente: {config.nome}\n"
-        f"   Cores: {config.cor_principal} → {config.cor_secundaria}\n"
+        f"   Cores: {config.cor_principal} → {config.cor_secundaria} (destaque {config.cor_destaque})\n"
         f"   Logo: {config.logo.relative_to(caminho.resolve().parent).as_posix()} ({config.logo_altura}px)\n"
         f"   Provedores: {provedores}\n"
         f"   Exemplos: {len(config.exemplos)}"

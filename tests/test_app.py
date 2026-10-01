@@ -7,6 +7,7 @@ exemplos (RF7) e a recusa de subir com config inválido (RF1).
 from __future__ import annotations
 
 import importlib
+import re
 import shutil
 import subprocess
 import sys
@@ -80,10 +81,8 @@ def test_rf1_config_invalido_impede_o_app_de_subir(tmp_path):
     for item in ("app.py", "agente", "assets"):
         origem = RAIZ / item
         (shutil.copytree if origem.is_dir() else shutil.copy)(origem, tmp_path / item)
-    texto = (
-        (RAIZ / "config.yaml")
-        .read_text(encoding="utf-8")
-        .replace('cor_principal: "#0F2540"', 'cor_principal: "#12345G"')
+    texto = re.sub(
+        r'cor_principal: "#[0-9A-Fa-f]+"', 'cor_principal: "#12345G"', (RAIZ / "config.yaml").read_text("utf-8")
     )
     (tmp_path / "config.yaml").write_text(texto, encoding="utf-8")
     assert "#12345G" in texto
@@ -130,7 +129,8 @@ def test_api_direta_desligada(config):
 
 def test_rf3_cabecalho_tem_logo_nome_e_descricao(config):
     cabecalho = montar_cabecalho(config)
-    assert "data:image/png;base64," in cabecalho
+    tipo = "svg+xml" if config.logo.suffix == ".svg" else config.logo.suffix.lstrip(".")
+    assert f"data:image/{tipo};base64," in cabecalho
     assert f"height:{config.logo_altura}px" in cabecalho
     assert "Professor de Dados &amp; IA" in cabecalho  # '&' escapado
     assert config.descricao in cabecalho
@@ -173,3 +173,26 @@ def test_contraste_padrao_wcag():
     assert round(contraste("#000000", "#FFFFFF"), 1) == 21.0
     assert contraste("#FFFFFF", "#FFFFFF") == 1.0
     assert contraste("#FFF", "#FFFFFF") == 1.0  # formato curto
+
+
+def test_cor_destaque_nos_botoes_e_no_filete(config):
+    css = montar_css(replace(config, cor_principal="#132A5C", cor_secundaria="#27488F", cor_destaque="#E0262B"))
+    assert "border-bottom: 3px solid #E0262B" in css
+    assert "background: #E0262B !important" in css  # Enviar/Parar
+    assert "border-color: #E0262B !important" in css  # exemplo ao passar o mouse
+
+
+def test_sem_cor_destaque_usa_a_principal(config):
+    css = montar_css(replace(config, cor_principal="#112233", cor_destaque=""))
+    assert "border-bottom: 3px solid #112233" in css
+
+
+def test_descricao_em_prata_sobre_fundo_escuro_e_legivel(config):
+    css = montar_css(replace(config, cor_principal="#132A5C", cor_secundaria="#27488F"))
+    assert "color: #D9DDE2 !important" in css
+    assert min(contraste("#D9DDE2", "#132A5C"), contraste("#D9DDE2", "#27488F")) >= 4.5
+
+
+def test_descricao_escura_sobre_fundo_claro(config):
+    css = montar_css(replace(config, cor_principal="#FFFFFF", cor_secundaria="#F5F5F5"))
+    assert "#D9DDE2" not in css

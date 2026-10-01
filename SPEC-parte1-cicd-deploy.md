@@ -209,6 +209,7 @@ exemplos:
 | `assistente.descricao` | **Sim** | Texto de 1 a 200 caracteres | — |
 | `aparencia.cor_principal` | **Sim** | Cor hexadecimal `#RRGGBB` ou `#RGB` (ex.: `#0F2540`) | — |
 | `aparencia.cor_secundaria` | Não | Cor hexadecimal, como acima | Igual à `cor_principal` (fundo liso, sem degradê) |
+| `aparencia.cor_destaque` | Não | Cor hexadecimal, como acima. Usada no botão Enviar/Parar, no filete sob o cabeçalho e na borda dos exemplos | Igual à `cor_principal` |
 | `aparencia.logo` | **Sim** | Caminho de um arquivo **existente** dentro de `assets/`, com extensão `.png`, `.jpg`, `.jpeg`, `.svg` ou `.webp`, até 1 MB | — |
 | `aparencia.logo_altura` | Não | Número inteiro de 24 a 300 (pixels) | `80` |
 | `ia.provedores` | **Sim** | Lista com 1 a 3 itens; a ordem da lista é a ordem de preferência | — |
@@ -223,6 +224,7 @@ exemplos:
 | `exemplos` | Não | Lista de 0 a 6 textos, cada um com 1 a 150 caracteres | `[]` (nenhum botão) |
 
 ### 4.3 Regras gerais do contrato
+- **Campos repetidos são erro** (ex.: duas seções `ia:`). O YAML comum ficaria só com a última, ignorando a outra em silêncio; a mensagem mostra as duas linhas.
 - **Campos desconhecidos são erro.** Assim um erro de digitação como `cor_principall` não passa em silêncio. A mensagem sugere o nome correto ("você quis dizer `cor_principal`?").
 - **As chaves de API nunca entram no `config.yaml`.** Qualquer campo com cara de chave é recusado.
 - Um provedor listado **sem** chave nos secrets é simplesmente pulado. Isso não é erro.
@@ -276,7 +278,7 @@ Tudo roda no GitHub Actions **sem chaves reais e sem internet para os provedores
 
 | # | Verificação | O que pega |
 |---|---|---|
-| **T1** | O `config.yaml` existe e é um YAML válido | Aspas ou indentação erradas (mostra a linha). |
+| **T1** | O `config.yaml` existe, é um YAML válido e não tem campos repetidos | Aspas ou indentação erradas, seção colada duas vezes (mostra a linha). |
 | **T2** | Todos os campos obrigatórios estão presentes e não vazios | "Esqueci o nome", "apaguei as instruções". |
 | **T3** | Tipos e faixas de valores (números, tamanhos de texto, listas) | `max_tokens: mil`, `temperatura: 3`. |
 | **T4** | Cores são hexadecimais válidas | `#12345G`, `azul-claro`, `0F2540` sem `#`. |

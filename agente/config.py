@@ -29,7 +29,13 @@ PADRAO_COR = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 # Estrutura esperada: nome do campo -> subcampos (dict) ou None (valor final).
 ESTRUTURA: dict[str, Any] = {
     "assistente": {"nome": None, "descricao": None},
-    "aparencia": {"cor_principal": None, "cor_secundaria": None, "logo": None, "logo_altura": None},
+    "aparencia": {
+        "cor_principal": None,
+        "cor_secundaria": None,
+        "cor_destaque": None,
+        "logo": None,
+        "logo_altura": None,
+    },
     "ia": {
         "provedores": None,
         "max_tokens": None,
@@ -74,9 +80,33 @@ class Config:
     max_mensagens_historico: int
     instrucoes: str
     exemplos: list[str] = field(default_factory=list)
+    cor_destaque: str = ""  # botões e detalhes; vazio = usa a cor_principal
 
 
 # ------------------------------------------------------------------ leitura
+
+
+class _CampoRepetido(Exception):
+    def __init__(self, campo: str, linha: int, linha_anterior: int):
+        self.campo, self.linha, self.linha_anterior = campo, linha, linha_anterior
+
+
+class _LeitorSemRepeticao(yaml.SafeLoader):
+    """Como o yaml.safe_load, mas recusa campos repetidos.
+
+    O YAML comum aceita 'ia:' duas vezes e fica só com a última, em silêncio:
+    metade da configuração seria ignorada sem nenhum aviso.
+    """
+
+    def construct_mapping(self, node, deep=False):
+        vistos: dict[Any, int] = {}
+        for chave_no, _ in node.value:
+            chave = self.construct_object(chave_no, deep=deep)
+            linha = chave_no.start_mark.line + 1
+            if chave in vistos:
+                raise _CampoRepetido(str(chave), linha, vistos[chave])
+            vistos[chave] = linha
+        return super().construct_mapping(node, deep=deep)
 
 
 def ler_yaml(caminho: Path) -> Any:
@@ -88,7 +118,14 @@ def ler_yaml(caminho: Path) -> Any:
     except UnicodeDecodeError:
         raise ErroConfig([f"❌ {caminho.name} não está em UTF-8. Salve o arquivo com codificação UTF-8."]) from None
     try:
-        return yaml.safe_load(texto)
+        return yaml.load(texto, Loader=_LeitorSemRepeticao)  # noqa: S506 - SafeLoader com uma checagem a mais
+    except _CampoRepetido as erro:
+        raise ErroConfig(
+            [
+                f"❌ O campo `{erro.campo}` aparece duas vezes (linhas {erro.linha_anterior} e {erro.linha}). "
+                "Deixe só um e junte o conteúdo nele; senão, um dos dois seria ignorado."
+            ]
+        ) from None
     except yaml.YAMLError as erro:
         marca = getattr(erro, "problem_mark", None)
         onde = f" na linha {marca.line + 1}, coluna {marca.column + 1}" if marca else ""
@@ -135,6 +172,7 @@ def validar(dados: Any, raiz: Path) -> list[str]:
     # aparencia
     _cor(aparencia, "aparencia.cor_principal", obrigatorio=True, erros=erros)
     _cor(aparencia, "aparencia.cor_secundaria", obrigatorio=False, erros=erros)
+    _cor(aparencia, "aparencia.cor_destaque", obrigatorio=False, erros=erros)
     _logo(aparencia, raiz, erros)
     _inteiro(aparencia, "aparencia.logo_altura", 24, 300, erros)
 
@@ -372,6 +410,7 @@ def _montar(dados: dict, raiz: Path) -> Config:
         descricao=a["descricao"].strip(),
         cor_principal=cor_principal,
         cor_secundaria=(ap.get("cor_secundaria") or cor_principal).strip(),
+        cor_destaque=(ap.get("cor_destaque") or cor_principal).strip(),
         logo=raiz / ap["logo"].strip(),
         logo_altura=ap.get("logo_altura") or 80,
         provedores=[Provedor(p["nome"].strip(), p["modelo"].strip()) for p in ia["provedores"]],

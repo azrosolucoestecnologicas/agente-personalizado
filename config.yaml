@@ -12,11 +12,12 @@ assistente:
   nome: "Professor de Dados & IA"
   descricao: "Tire suas dúvidas de Engenharia de Dados e Inteligência Artificial."
 
-aparencia:
-  cor_principal: "#0F2540"      # cor do topo do degradê
-  cor_secundaria: "#1E4D7A"     # opcional: cor do fim do degradê
-  logo: "assets/logo.png"       # a imagem precisa estar na pasta assets/
-  logo_altura: 80               # em pixels (24 a 300)
+aparencia:                      # cores do Instituto NTA: azul, prata e vermelho
+  cor_principal: "#132A5C"      # azul escuro: topo do degradê e mensagens do aluno
+  cor_secundaria: "#27488F"     # azul: fim do degradê
+  cor_destaque: "#E0262B"       # vermelho: botão Enviar, filete do topo e detalhes
+  logo: "assets/logo.svg"       # a imagem precisa estar na pasta assets/
+  logo_altura: 96               # em pixels (24 a 300)
 
 ia:
   provedores:                   # ordem de preferência: o 1º é tentado primeiro

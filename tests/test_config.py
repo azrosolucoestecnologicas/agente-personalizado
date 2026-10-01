@@ -333,3 +333,31 @@ def test_t7_chave_de_api_no_config_e_recusada(projeto):
     chave_falsa = "sk-" + "ant-" + "api03-" + "a" * 30
     dados = com(assistente__descricao=f"minha chave {chave_falsa}")
     assert "parece conter uma chave de API" in erros_de(dados, projeto)
+
+
+# --------------------------------------------- campos repetidos e cor_destaque
+
+
+def test_t1_secao_repetida_e_recusada_com_as_linhas(tmp_path):
+    arquivo = tmp_path / "config.yaml"
+    arquivo.write_text("ia:\n  max_tokens: 100\nassistente:\n  nome: x\nia:\n  max_tokens: 200\n", encoding="utf-8")
+    with pytest.raises(ErroConfig, match=r"`ia` aparece duas vezes \(linhas 1 e 5\)"):
+        carregar_config(arquivo)
+
+
+def test_t1_campo_repetido_dentro_da_secao(tmp_path):
+    arquivo = tmp_path / "config.yaml"
+    arquivo.write_text('aparencia:\n  cor_principal: "#000"\n  cor_principal: "#fff"\n', encoding="utf-8")
+    with pytest.raises(ErroConfig, match="`cor_principal` aparece duas vezes"):
+        carregar_config(arquivo)
+
+
+def test_cor_destaque_opcional_usa_a_principal(projeto):
+    arquivo = projeto / "config.yaml"
+    arquivo.write_text(yaml.safe_dump(CONFIG_BASE), encoding="utf-8")
+    assert carregar_config(arquivo).cor_destaque == "#0F2540"
+
+
+def test_cor_destaque_validada(projeto):
+    assert "`aparencia.cor_destaque`" in erros_de(com(aparencia__cor_destaque="vermelho"), projeto)
+    assert validar(com(aparencia__cor_destaque="#E0262B"), projeto) == []
