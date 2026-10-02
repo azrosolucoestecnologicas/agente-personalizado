@@ -41,6 +41,10 @@ jobs:
       - name: "T1–T7: conferir o config.yaml"
         run: python scripts/validar_config.py
 
+      - name: "T19: conferir a pasta documentos/"
+        if: ${{ !cancelled() }}
+        run: python scripts/validar_documentos.py
+
       - name: "T8: procurar chaves de API no código"
         if: ${{ !cancelled() }}
         run: python scripts/procurar_chaves.py
