@@ -102,6 +102,7 @@ agente-personalizado/
 │   ├── avaliar.py                      🆕 roda as perguntas de teste e aplica o limiar (T25)
 │   ├── validar_documentos.py          🆕 confere a pasta documentos/ (T19), com resumo no Actions
 │   ├── validar_perguntas.py           🆕 confere o perguntas_teste.yaml (T21), sem rede
+│   ├── mostrar_trechos.py             🆕 mostra como os documentos são divididos (tarefa 3)
 │   └── publicar.py                     ✏️ envia documentos/; confere secrets do Supabase no Space
 ├── tests/
 │   ├── test_documentos.py              🆕 T19 e T20

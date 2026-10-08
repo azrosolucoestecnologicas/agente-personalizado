@@ -160,3 +160,21 @@ def test_normalizar_e_secao_confere():
     assert normalizar("  Recuperação   Híbrida ") == "recuperacao hibrida"
     assert secao_confere("12 Recuperação híbrida e RRF > RRF: Reciprocal Rank Fusion", "rrf")
     assert not secao_confere("09 Chunking: dividir para achar", "RRF")
+
+
+def test_t21_toda_secao_esperada_existe_nos_trechos():
+    """A avaliação compara com a seção DO TRECHO; se a divisão sumir com um título, a pergunta nunca acertaria."""
+    from agente.config import carregar_config
+    from agente.documentos import dividir_pasta
+
+    base = carregar_config().base_conhecimento
+    trechos = dividir_pasta(tamanho_trecho=base.tamanho_trecho, sobreposicao=base.sobreposicao)
+    texto = re.sub(
+        r"^  # (- pergunta:|  fonte_esperada:|  secao_esperada:)",
+        r"  \1",
+        ARQUIVO_PADRAO.read_text("utf-8"),
+        flags=re.M,
+    )
+    for p in yaml.safe_load(texto)["perguntas"]:
+        achados = [t for t in trechos if t.fonte == p["fonte_esperada"] and secao_confere(t.secao, p["secao_esperada"])]
+        assert achados, f'nenhum trecho com a seção "{p["secao_esperada"]}" em {p["fonte_esperada"]}'

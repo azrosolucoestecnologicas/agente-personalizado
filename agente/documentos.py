@@ -142,3 +142,230 @@ def validar_pasta(pasta: Path = PASTA_PADRAO) -> list[str]:
     for documento in documentos:
         erros += validar_documento(documento)
     return erros
+
+
+# ----------------------------------------------------------- divisão em trechos
+#
+# Estratégia "por estrutura" (seção 09 da apostila da Parte 2): cada seção (##)
+# e subseção (###) vira uma unidade; o caminho de títulos vira metadado E é
+# repetido no início do texto do trecho, antes do embedding.
+
+SEPARADOR_SECAO = " > "
+TAMANHO_MINIMO_SECAO = 200  # seções menores que isso são juntadas à seguinte (RF25)
+
+
+@dataclass(frozen=True)
+class Trecho:
+    fonte: str  # nome do arquivo, ex.: parte2-rag.md
+    secao: str  # caminho de títulos, ex.: "09 Chunking: dividir para achar > Estratégias de chunking"
+    ordem: int  # posição do trecho dentro do documento (0, 1, 2, ...)
+    conteudo: str  # começa com a seção; é o texto do embedding e da busca por palavras
+
+
+@dataclass
+class _Unidade:
+    secao_mae: str  # título ## (ou o título # para o texto de abertura)
+    subsecoes: list[str]  # títulos ### que entraram nesta unidade
+    corpo: str
+
+    @property
+    def secao(self) -> str:
+        if not self.subsecoes:
+            return self.secao_mae
+        return self.secao_mae + SEPARADOR_SECAO + " / ".join(self.subsecoes)
+
+
+def _unidades(texto: str) -> list[list[_Unidade]]:
+    """Agrupa o texto em unidades por seção. Cada grupo = uma seção ## (ou a abertura)."""
+    grupos: list[list[_Unidade]] = []
+    titulo_documento = ""
+    atual: _Unidade | None = None
+    linhas_atual: list[str] = []
+    dentro_de_codigo = False
+
+    def fechar():
+        if atual is not None:
+            atual.corpo = "\n".join(linhas_atual).strip()
+            if atual.corpo:
+                grupos[-1].append(atual)
+
+    for linha in texto.splitlines():
+        if PADRAO_CERCA.match(linha):
+            dentro_de_codigo = not dentro_de_codigo
+        m = None if dentro_de_codigo or PADRAO_CERCA.match(linha) else PADRAO_TITULO.match(linha)
+        nivel = len(m.group(1)) if m else 0
+        if nivel == 1:
+            fechar()
+            titulo_documento = m.group(2).strip()
+            grupos.append([])
+            atual, linhas_atual = _Unidade(titulo_documento, [], ""), []
+        elif nivel == 2:
+            fechar()
+            grupos.append([])
+            atual, linhas_atual = _Unidade(m.group(2).strip(), [], ""), []
+        elif nivel == 3:
+            fechar()
+            mae = atual.secao_mae if atual else titulo_documento
+            if not grupos:
+                grupos.append([])
+            atual, linhas_atual = _Unidade(mae, [m.group(2).strip()], ""), []
+        else:
+            if atual is None:  # texto antes de qualquer título
+                grupos.append([])
+                atual = _Unidade(titulo_documento or "Documento", [], "")
+            linhas_atual.append(linha)
+    fechar()
+    return [g for g in grupos if g]
+
+
+def _juntar(a: _Unidade, b: _Unidade) -> _Unidade:
+    """Une duas unidades da mesma seção-mãe; o subtítulo da segunda fica no texto, em negrito."""
+    corpo_b = (f"**{' / '.join(b.subsecoes)}**\n\n" if b.subsecoes else "") + b.corpo
+    return _Unidade(a.secao_mae, a.subsecoes + b.subsecoes, a.corpo + "\n\n" + corpo_b)
+
+
+def _juntar_pequenas(grupo: list[_Unidade]) -> list[_Unidade]:
+    """RF25: seção curta (< 200 caracteres) é juntada à seguinte da mesma seção-mãe."""
+    resultado: list[_Unidade] = []
+    pendente: _Unidade | None = None
+    for i, unidade in enumerate(grupo):
+        if pendente is not None:
+            unidade, pendente = _juntar(pendente, unidade), None
+        if len(unidade.corpo) < TAMANHO_MINIMO_SECAO and i < len(grupo) - 1:
+            pendente = unidade
+            continue
+        resultado.append(unidade)
+    if pendente is not None:
+        resultado.append(pendente)
+    # A última, se for curta, vai para a anterior (não há "seguinte" na mesma seção-mãe).
+    if len(resultado) >= 2 and len(resultado[-1].corpo) < TAMANHO_MINIMO_SECAO:
+        ultima = resultado.pop()
+        resultado[-1] = _juntar(resultado[-1], ultima)
+    return resultado
+
+
+def _blocos(corpo: str) -> list[str]:
+    """Parágrafos, mas tabela e bloco de código ficam inteiros."""
+    blocos: list[str] = []
+    atual: list[str] = []
+    dentro_de_codigo = False
+    for linha in corpo.splitlines():
+        if PADRAO_CERCA.match(linha):
+            if not dentro_de_codigo and atual:
+                blocos.append("\n".join(atual))
+                atual = []
+            dentro_de_codigo = not dentro_de_codigo
+            atual.append(linha)
+            if not dentro_de_codigo:
+                blocos.append("\n".join(atual))
+                atual = []
+            continue
+        if dentro_de_codigo:
+            atual.append(linha)
+        elif not linha.strip():
+            if atual:
+                blocos.append("\n".join(atual))
+                atual = []
+        else:
+            eh_tabela, era_tabela = linha.startswith("|"), bool(atual) and atual[-1].startswith("|")
+            if atual and eh_tabela != era_tabela:  # tabela começa ou termina sem linha em branco
+                blocos.append("\n".join(atual))
+                atual = []
+            atual.append(linha)
+    if atual:
+        blocos.append("\n".join(atual))
+    return [b.strip("\n") for b in blocos if b.strip()]
+
+
+def _agrupar(partes: list[str], maximo: int, junta: str) -> list[str]:
+    grupos: list[str] = []
+    atual = ""
+    for parte in partes:
+        while len(parte) > maximo:  # último recurso: corta no limite
+            corte = parte.rfind(" ", 0, maximo)
+            corte = corte if corte > maximo // 2 else maximo
+            if atual:
+                grupos.append(atual)
+                atual = ""
+            grupos.append(parte[:corte].rstrip())
+            parte = parte[corte:].lstrip()
+        candidato = atual + junta + parte if atual else parte
+        if len(candidato) <= maximo:
+            atual = candidato
+        else:
+            grupos.append(atual)
+            atual = parte
+    if atual:
+        grupos.append(atual)
+    return grupos
+
+
+def _quebrar(bloco: str, maximo: int) -> list[str]:
+    """Quebra um bloco grande demais respeitando o formato dele."""
+    if len(bloco) <= maximo:
+        return [bloco]
+    linhas = bloco.splitlines()
+    if PADRAO_CERCA.match(linhas[0]):  # código: por linhas, cada pedaço com as cercas
+        cerca, miolo = linhas[0], linhas[1:-1] if PADRAO_CERCA.match(linhas[-1]) else linhas[1:]
+        pedacos = _agrupar(miolo, maximo - len(cerca) - 5, "\n")
+        return [f"{cerca}\n{p}\n```" for p in pedacos]
+    if bloco.startswith("|") and len(linhas) > 2:  # tabela: por linhas, repetindo o cabeçalho
+        cabecalho = "\n".join(linhas[:2])
+        pedacos = _agrupar(linhas[2:], maximo - len(cabecalho) - 1, "\n")
+        return [f"{cabecalho}\n{p}" for p in pedacos]
+    frases = re.split(r"(?<=[.!?;:])\s+", bloco)  # texto: por frases
+    return _agrupar(frases, maximo, " ")
+
+
+def _rabo(texto: str, tamanho: int) -> str:
+    """O fim do trecho anterior, começando numa palavra inteira (a sobreposição)."""
+    if tamanho <= 0 or len(texto) <= tamanho:
+        return "" if tamanho <= 0 else texto
+    rabo = texto[-tamanho:]
+    # Começa no início de uma linha, se houver (não corta linha de tabela ou de lista);
+    # senão, no início de uma palavra.
+    quebra = re.search(r"\n", rabo) or re.search(r"\s", rabo)
+    rabo = rabo[quebra.end() :] if quebra else rabo
+    if rabo.count("```") % 2:  # não começar no meio de um bloco de código
+        return ""
+    return rabo.strip()
+
+
+def _dividir_corpo(corpo: str, limite: int, sobreposicao: int) -> list[str]:
+    """Corpo da seção em pedaços de até `limite` caracteres, com sobreposição."""
+    if len(corpo) <= limite:
+        return [corpo]
+    sobreposicao = min(sobreposicao, limite // 3)  # garante que cada pedaço avance
+    maximo_peca = limite - sobreposicao - 2
+    pecas = [p for bloco in _blocos(corpo) for p in _quebrar(bloco, maximo_peca)]
+    pedacos: list[str] = []
+    atual = ""
+    for peca in pecas:
+        candidato = atual + "\n\n" + peca if atual else peca
+        if len(candidato) <= limite:
+            atual = candidato
+            continue
+        pedacos.append(atual)
+        rabo = _rabo(atual, sobreposicao)
+        atual = rabo + "\n\n" + peca if rabo else peca
+    if atual:
+        pedacos.append(atual)
+    return pedacos
+
+
+def dividir_documento(caminho: Path, tamanho_trecho: int = 1500, sobreposicao: int = 200) -> list[Trecho]:
+    """Divide um documento .md em trechos (RF25 e RF26)."""
+    texto = caminho.read_text(encoding="utf-8")
+    trechos: list[Trecho] = []
+    for grupo in _unidades(texto):
+        for unidade in _juntar_pequenas(grupo):
+            cabecalho = unidade.secao
+            limite = max(tamanho_trecho - len(cabecalho) - 2, 100)
+            for pedaco in _dividir_corpo(unidade.corpo, limite, sobreposicao):
+                trechos.append(Trecho(caminho.name, unidade.secao, len(trechos), f"{cabecalho}\n\n{pedaco}"))
+    return trechos
+
+
+def dividir_pasta(pasta: Path = PASTA_PADRAO, tamanho_trecho: int = 1500, sobreposicao: int = 200) -> list[Trecho]:
+    """Todos os trechos de todos os documentos .md da pasta, em ordem."""
+    return [t for doc in sorted(pasta.glob("*.md")) for t in dividir_documento(doc, tamanho_trecho, sobreposicao)]

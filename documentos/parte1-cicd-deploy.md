@@ -168,7 +168,7 @@ Achar que o Actions roda no seu computador, ou que o GitHub "entende" seu Python
 |---|---|---|
 |`push`|Alguém enviou código novo (inclui editar e dar commit pelo site)|Sim|
 |`workflow_dispatch`|Botão **Run workflow**, apertado por uma pessoa na aba Actions|Sim|
-|`schedule`|Horário marcado, no formato cron. Ex.:`'0 11 * * *'` é todo dia às 11h UTC, ou seja, 8h de Brasília|Não; útil quando os dados mudam sozinhos|
+|`schedule`|Horário marcado, no formato cron. Ex.: `'0 11 * * *'` é todo dia às 11h UTC, ou seja, 8h de Brasília|Não; útil quando os dados mudam sozinhos|
 
 Atenção ao fuso: o cron do GitHub usa UTC, três horas à frente de Brasília. É um tropeço clássico.
 
@@ -197,7 +197,7 @@ Mesmo depois de apagada, ela continua no histórico do Git, e robôs varrem repo
 
 ## 09 YAML em cinco regras
 
-YAML é um formato de arquivo de configuração. Não é linguagem de programação: é uma lista de coisas com nome. Neste projeto há dois arquivos YAML: o `config.yml ` (seu assistente) e o ` deploy.yml` (o processo).
+YAML é um formato de arquivo de configuração. Não é linguagem de programação: é uma lista de coisas com nome. Neste projeto há dois arquivos YAML: o `config.yml` (seu assistente) e o `deploy.yml` (o processo).
 
 **1. chave: valor.**
 
@@ -254,10 +254,10 @@ assistente-ia/
 
 |**Campo**|**O que faz**|
 |---|---|
-|`nome ` e`descricao`|Título e subtítulo no topo da página|
+|`nome` e `descricao`|Título e subtítulo no topo da página|
 |`tema`|Cor principal: azul, verde, vermelho, laranja, roxo ou grafite|
 |`logo`|Um arquivo .svg no repositório ou um link https para uma imagem|
-|`modelo ` e`max_tokens`|Qual modelo responde e o tamanho máximo da resposta|
+|`modelo` e `max_tokens`|Qual modelo responde e o tamanho máximo da resposta|
 |`prompt_sistema`|Quem é o assistente, com quem ele fala, como responde e o que ele não faz|
 |`exemplos`|Perguntas prontas que aparecem como botões|
 
@@ -362,7 +362,7 @@ O README.md também tem função técnica: o cabeçalho entre as linhas `---` di
 
 2. No GitHub, no seu repositório: **Settings**, **Secrets and variables**, **Actions**, **New repository secret**. Nome: `HF_TOKEN`. Cole o valor.
 
-3. Abra `.github/workflows/deploy.yml `, clique no lápis e troque ` seu-usuario ` e ` meu-assistente` pelos seus dados, exatamente como aparecem na URL do Space. Clique em **Commit changes**.
+3. Abra `.github/workflows/deploy.yml`, clique no lápis e troque `seu-usuario` e `meu-assistente` pelos seus dados, exatamente como aparecem na URL do Space. Clique em **Commit changes**.
 
 ### D. O primeiro deploy
 
@@ -378,11 +378,11 @@ O README.md também tem função técnica: o cabeçalho entre as linhas `---` di
 
 2. Acompanhe o novo deploy na aba Actions e confira o resultado no Space.
 
-3. Para trocar a logo: suba um `.svg ` ou use um link ` https ` de imagem no campo ` logo`.
+3. Para trocar a logo: suba um `.svg` ou use um link `https` de imagem no campo `logo`.
 
 ### F. Veja o portão funcionando
 
-1. No `config.yml `, troque o tema para ` rosa` (que não existe) e faça commit.
+1. No `config.yml`, troque o tema para `rosa` (que não existe) e faça commit.
 
 2. Na aba Actions: o job **testar** fica vermelho, o **publicar** nem começa. Abra o passo vermelho e leia a mensagem.
 
@@ -416,12 +416,11 @@ O assistente ganha uma base de conhecimento. Você coloca documentos do seu dom�
 |Job testar vermelho|O portão encontrou um problema|Abra o passo "Rodar o portão" e leia a lista impressa|
 |O workflow não aparece na aba Actions|O arquivo não está em `.github/workflows/`. O upload pelo navegador às vezes ignora pastas que começam com ponto|Add file, Create new file, digite o caminho completo `.github/workflows/deploy.yml` e cole o conteúdo|
 |Publicar falha com Authentication failed ou 403|`HF_TOKEN` ausente, com nome diferente ou do tipo Read|Gere um token Write e cadastre de novo com o nome exato|
-|Repository not found|`HF_USUARIO ` ou`HF_SPACE` diferente do Space criado|Copie exatamente da URL do Space|
+|Repository not found|`HF_USUARIO` ou `HF_SPACE` diferente do Space criado|Copie exatamente da URL do Space|
 |Push rejeitado por arquivo binário|Imagem .png ou .jpg no repositório|Use logo .svg ou link https e apague a imagem|
 |did not find expected key|Tab ou indentação desalinhada no YAML|Só espaços; confira a linha citada|
 |Space em Build error|Cabeçalho do README.md apagado ou alterado|Abra a aba Logs do Space e restaure o cabeçalho|
-|Chat responde que a chave|Secret ausente no Space ou com|Cadastre `ANTHROPIC_API_KEY` no|
-|não foi configurada|outro nome|Space e reinicie (Settings, Restart)|
+|Chat responde que a chave não foi configurada|Secret ausente no Space ou com outro nome|Cadastre `ANTHROPIC_API_KEY` no Space e reinicie (Settings, Restart)|
 |Erro de autenticação ou de crédito na resposta|Chave inválida, revogada ou conta sem crédito|Confira no console da Anthropic|
 |Actions verde, Space com versão antiga|O Space ainda está reconstruindo|Espere o status Running e recarregue|
 |Space mostra Sleeping|Ficou muito tempo sem acesso|Abra a página; ele acorda em instantes|
@@ -436,7 +435,7 @@ Opcional. Serve para quando você quiser testar mudanças antes de subir.
 
 - **Windows:** instale o Git for Windows (git-scm.com), que traz o Git Bash, e o Python (python.org). No instalador do Python, marque **Add Python to PATH**.
 
-- **macOS:** no Terminal, `git --version ` oferece instalar as ferramentas. Python atual em python.org ou ` brew install python git`.
+- **macOS:** no Terminal, `git --version` oferece instalar as ferramentas. Python atual em python.org ou `brew install python git`.
 
 - **Linux:** `sudo apt install git python3 python3-pip` (Debian e Ubuntu).
 
