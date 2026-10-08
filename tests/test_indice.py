@@ -394,3 +394,16 @@ def test_projeto_tem_perguntas_fora_do_material():
     from agente.perguntas import carregar
 
     assert len(carregar().fora_do_material) >= 5
+
+
+@pytest.mark.parametrize("script,argv", [(indexar, []), (indexar, ["--promover"]), (avaliar, [])])
+def test_base_desligada_nao_toca_no_banco(monkeypatch, capsys, script, argv):
+    from agente.config import carregar_config
+
+    config = carregar_config()
+    desligada = type(config)(**{**config.__dict__, "base_conhecimento": BaseConhecimento(ativa=False)})
+    monkeypatch.setattr(script, "carregar_config", lambda: desligada)
+    banco = BancoFalso()
+    assert script.main(argv, gerador=GeradorFalso(), banco=banco) == 0
+    assert banco.chamadas == [] and banco.buscas == []
+    assert "desligada" in capsys.readouterr().out

@@ -1,8 +1,12 @@
-# Portão de testes + publicação no Hugging Face Spaces.
+# Portão de testes + base de conhecimento + publicação no Hugging Face Spaces.
 #
-# - Em QUALQUER branch e em pull requests: roda todas as verificações.
-# - Só em push na branch main: se tudo passar, publica no Space.
-# Se algo falhar, nada é publicado e o site antigo continua no ar.
+#   testes ──► avaliar ──► publicar
+#
+# - Em QUALQUER branch e em pull requests: "testes" (T1–T24, sem rede).
+# - Na main (push) ou pelo botão "Run workflow": "avaliar" reconstrói a coleção
+#   "teste" no Supabase e mede a busca (T25). Fora da main, para por aí.
+# - Só na main: "publicar" promove "teste" → "producao" e envia o app ao Space.
+# Se algo falhar, nada é publicado: a "producao" e o site antigo continuam no ar.
 # O que corrigir aparece na execução → aba "Summary".
 
 name: Testar e publicar
@@ -81,21 +85,22 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Instalar a biblioteca do Hugging Face
-        run: pip install "huggingface_hub==1.33.0"
+      - name: Instalar bibliotecas da conferência
+        run: pip install "huggingface_hub==1.33.0" "PyYAML==6.0.2"
 
-      - name: Conferir Space, token, hardware e secrets
+      - name: Conferir Space, token, hardware e secrets (IA e Supabase)
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_SPACE: ${{ vars.HF_SPACE }}
         run: python scripts/publicar.py --conferir
 
-  # Parte 2: monta a coleção "teste" no Supabase e mede a busca (T25).
-  # Por enquanto só pelo botão "Run workflow" (tarefa 5). Nunca toca na "producao".
+  # Parte 2: reconstrói a coleção "teste" no Supabase e mede a busca (T25).
+  # Na main a cada push (mesmo sem documento alterado) e pelo botão "Run workflow"
+  # em qualquer branch. Nunca toca na "producao".
   avaliar:
     name: avaliar
     needs: testes
-    if: github.event_name == 'workflow_dispatch'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # Um índice por vez: duas execuções juntas misturariam a coleção "teste".
@@ -124,13 +129,6 @@ jobs:
           path: ${{ runner.temp }}/modelos
           key: modelos-e5-base-${{ hashFiles('requirements.txt') }}
 
-      - name: Experimento de calibração (temporário)
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
-          FASTEMBED_CACHE_PATH: ${{ runner.temp }}/modelos
-        run: python scripts/experimento.py
-
       - name: Indexar a coleção teste
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -155,14 +153,15 @@ jobs:
 
   publicar:
     name: publicar
-    needs: testes
-    # Só publica a partir da main (push ou botão manual), nunca em pull requests.
+    needs: [testes, avaliar]
+    # Só publica a partir da main (push ou botão manual), nunca em pull requests,
+    # e só se a busca passou no T25.
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    # Uma publicação por vez; se vierem duas seguidas, a segunda espera.
+    # Mesmo grupo do "avaliar": uma publicação por vez, sem misturar coleções.
     concurrency:
-      group: publicar-space
+      group: indice-supabase
       cancel-in-progress: false
     steps:
       - name: Baixar o código
@@ -173,8 +172,23 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Instalar a biblioteca do Hugging Face
-        run: pip install "huggingface_hub==1.33.0"
+      # Só o necessário: conferir, promover e enviar não precisam do modelo de embedding.
+      - name: Instalar bibliotecas da publicação
+        run: pip install "huggingface_hub==1.33.0" "PyYAML==6.0.2" "httpx==0.28.1"
+
+      - name: Conferir Space, token, hardware e secrets (IA e Supabase)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE: ${{ vars.HF_SPACE }}
+        run: python scripts/publicar.py --conferir
+
+      # Primeiro promove, depois envia o código: a tabela tem o mesmo formato,
+      # então a "producao" nova serve também para o app que já está no ar.
+      - name: "Promover: a coleção teste vira producao (uma transação)"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: python scripts/indexar.py --promover
 
       - name: Enviar para o Space e acompanhar o build
         env:

@@ -206,6 +206,10 @@ def main(argv: list[str] | None = None, gerador: GeradorEmbeddings | None = None
     args = parser.parse_args(argv)
     try:
         base = carregar_config().base_conhecimento
+        if not base.ativa:
+            print("ℹ️ Base de conhecimento desligada no config.yaml (ativa: false): nada a fazer.")
+            escrever_resumo_actions("## ℹ️ Base de conhecimento desligada: nada a fazer")
+            return 0
         conjunto = carregar()
         banco = banco or do_ambiente(CHAVE)
         if gerador is None:

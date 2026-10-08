@@ -24,7 +24,8 @@ RAIZ = Path(__file__).resolve().parent.parent
 SPACE_PADRAO = "thiagoazro/agente-personalizado"
 
 # Só isto vai para o Space (spec, seção 3). Testes, scripts e .github ficam no GitHub.
-ARQUIVOS_DO_APP = ["README.md", "app.py", "config.yaml", "requirements.txt", "assets/*", "agente/*"]
+# documentos/ vai como referência pública: o Space lê o material do banco, não dos arquivos.
+ARQUIVOS_DO_APP = ["README.md", "app.py", "config.yaml", "requirements.txt", "assets/*", "agente/*", "documentos/*"]
 IGNORAR = ["*__pycache__*", "*.pyc", ".DS_Store"]
 
 ESTAGIOS_OK = {"RUNNING"}
@@ -106,6 +107,9 @@ def aguardar_build(
 
 
 VARIAVEIS_DE_CHAVE = ("OPENROUTER_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY")
+# Parte 2: o Space lê a base com a chave PUBLICÁVEL. A secreta (grava e promove) fica só no GitHub.
+SUPABASE_NO_SPACE = ("SUPABASE_URL", "SUPABASE_PUBLISHABLE_KEY")
+SUPABASE_PROIBIDA = "SUPABASE_SECRET_KEY"
 
 
 def _explicar_erro_http(erro, space: str) -> str:
@@ -124,8 +128,10 @@ def _explicar_erro_http(erro, space: str) -> str:
     return f"O Hugging Face respondeu com erro ({status}). Tente de novo em alguns minutos."
 
 
-def conferir(api, space: str) -> tuple[list[str], list[str], list[str]]:
-    """Confere a configuração manual (spec 7.2). Devolve (erros, avisos, itens ok).
+def conferir(api, space: str, base_ativa: bool = True) -> tuple[list[str], list[str], list[str]]:
+    """Confere a configuração manual (spec 7.2 e, na Parte 2, os secrets do Supabase).
+
+    Devolve (erros, avisos, itens ok).
 
     Só lê NOMES de secrets; os valores nunca podem ser lidos.
     """
@@ -177,7 +183,37 @@ def conferir(api, space: str) -> tuple[list[str], list[str], list[str]]:
             "Nenhuma chave de IA nos secrets do Space: o chat vai abrir, mas só vai pedir para cadastrar "
             "OPENROUTER_API_KEY, ANTHROPIC_API_KEY ou OPENAI_API_KEY."
         )
+    if base_ativa:
+        _conferir_supabase(secrets, variaveis, erros, ok)
     return erros, avisos, ok
+
+
+def _conferir_supabase(secrets: set[str], variaveis: set[str], erros: list[str], ok: list[str]) -> None:
+    """RF39 e RF40: no Space, só a URL e a chave publicável; a secreta, nunca."""
+    if SUPABASE_PROIBIDA in secrets | variaveis:
+        erros.append(
+            f"{SUPABASE_PROIBIDA} está cadastrada no Space. Ela grava e apaga a base: fica SÓ no GitHub. "
+            "Apague-a do Space e gere outra no Supabase (Project Settings → API Keys), depois atualize o GitHub."
+        )
+    faltando = [nome for nome in SUPABASE_NO_SPACE if nome not in secrets | variaveis]
+    if faltando:
+        erros.append(
+            f"Falta no Space: {', '.join(faltando)} (Settings → Variables and secrets → New secret). "
+            "Sem isso, o chat responde que a base de conhecimento está indisponível."
+        )
+    else:
+        ok.append("Supabase no Space: SUPABASE_URL e SUPABASE_PUBLISHABLE_KEY (só leitura)")
+
+
+def _base_ativa() -> bool:
+    """A base de conhecimento está ligada no config.yaml? (se o config não abrir, os testes já acusaram)"""
+    sys.path.insert(0, str(RAIZ))
+    from agente.config import ErroConfig, carregar_config
+
+    try:
+        return carregar_config().base_conhecimento.ativa
+    except ErroConfig:
+        return True
 
 
 def relatorio(erros: list[str], avisos: list[str], ok: list[str]) -> str:
@@ -206,7 +242,7 @@ def main(argv: list[str] | None = None) -> int:
     from huggingface_hub.errors import HfHubHTTPError
 
     api = HfApi(token=token)
-    erros, avisos, ok = conferir(api, space)
+    erros, avisos, ok = conferir(api, space, base_ativa=_base_ativa())
     escrever_resumo(relatorio(erros, avisos, ok))
     if erros:
         escrever_resumo("## ❌ Configuração incompleta: nada foi publicado. Corrija os itens com ❌.")

@@ -62,13 +62,47 @@ def test_verificacoes_rodam_mesmo_se_uma_anterior_falhar(workflow):
     assert all("!cancelled()" in str(p.get("if", "")) for p in depois_do_validador)
 
 
-def test_publicar_so_depois_dos_testes_e_so_na_main(workflow):
+def test_publicar_so_depois_dos_testes_e_da_avaliacao_e_so_na_main(workflow):
     job = workflow["jobs"]["publicar"]
-    assert job["needs"] == "testes"
+    assert job["needs"] == ["testes", "avaliar"]
     assert "refs/heads/main" in job["if"]
     assert "pull_request" in job["if"]
     assert job["concurrency"]["cancel-in-progress"] is False
     assert "python scripts/publicar.py" in _comandos(job)
+
+
+def _passos(job) -> list[str]:
+    return [p["run"].strip() for p in job["steps"] if "run" in p]
+
+
+def test_publicar_confere_promove_e_depois_envia(workflow):
+    passos = _passos(workflow["jobs"]["publicar"])
+    ordem = [
+        passos.index("python scripts/publicar.py --conferir"),
+        passos.index("python scripts/indexar.py --promover"),
+        passos.index("python scripts/publicar.py"),
+    ]
+    assert ordem == sorted(ordem)
+
+
+def test_avaliar_reconstroi_teste_e_mede_a_busca(workflow):
+    job = workflow["jobs"]["avaliar"]
+    assert job["needs"] == "testes"
+    assert "refs/heads/main" in job["if"] and "workflow_dispatch" in job["if"]
+    passos = _passos(job)
+    assert passos.index("python scripts/indexar.py") < passos.index("python scripts/avaliar.py")
+    assert "--promover" not in _comandos(job)  # o avaliar nunca toca na producao
+
+
+def test_avaliar_e_publicar_nunca_rodam_juntos(workflow):
+    grupos = {workflow["jobs"][j]["concurrency"]["group"] for j in ("avaliar", "publicar")}
+    assert grupos == {"indice-supabase"}
+
+
+def test_rf40_chave_secreta_do_supabase_so_nos_jobs_que_gravam(workflow):
+    for nome, job in workflow["jobs"].items():
+        usa = "SUPABASE_SECRET_KEY" in str(job)
+        assert usa == (nome in ("avaliar", "publicar")), nome
 
 
 def test_botao_manual_fora_da_main_so_confere(workflow):
@@ -197,7 +231,7 @@ class HfFalso:
         erro_acesso=None,
         sdk="gradio",
         hardware="zero-a10g",
-        secrets=("OPENROUTER_API_KEY",),
+        secrets=("OPENROUTER_API_KEY", "SUPABASE_URL", "SUPABASE_PUBLISHABLE_KEY"),
         variaveis=(),
         erro_envio=None,
     ):
@@ -269,7 +303,7 @@ def test_conferencia_sem_zerogpu_e_so_aviso():
 
 
 def test_conferencia_sem_chave_de_ia_e_so_aviso():
-    erros, avisos, _ = publicar.conferir(HfFalso(secrets=()), "u/s")
+    erros, avisos, _ = publicar.conferir(HfFalso(secrets=("SUPABASE_URL", "SUPABASE_PUBLISHABLE_KEY")), "u/s")
     assert erros == [] and "Nenhuma chave de IA" in avisos[0]
 
 
@@ -277,6 +311,38 @@ def test_conferencia_chave_cadastrada_como_variable_bloqueia():
     erros, _, _ = publicar.conferir(HfFalso(secrets=(), variaveis=("OPENAI_API_KEY",)), "u/s")
     assert "OPENAI_API_KEY foi cadastrada como VARIABLE" in erros[0]
     assert "REVOGUE" in erros[0]
+
+
+# ------------------------------------ Parte 2: secrets do Supabase no Space
+
+
+def test_conferencia_supabase_ok():
+    erros, _, ok = publicar.conferir(HfFalso(), "u/s")
+    assert erros == [] and any("SUPABASE_PUBLISHABLE_KEY (só leitura)" in item for item in ok)
+
+
+def test_conferencia_chave_publicavel_pode_ser_variable():
+    api = HfFalso(secrets=("OPENROUTER_API_KEY",), variaveis=("SUPABASE_URL", "SUPABASE_PUBLISHABLE_KEY"))
+    erros, _, _ = publicar.conferir(api, "u/s")
+    assert erros == []
+
+
+@pytest.mark.parametrize("onde", ["secrets", "variaveis"])
+def test_rf40_chave_secreta_do_supabase_no_space_bloqueia(onde):
+    nomes = {"secrets": ("OPENROUTER_API_KEY", "SUPABASE_URL", "SUPABASE_PUBLISHABLE_KEY"), "variaveis": ()}
+    nomes[onde] = (*nomes[onde], "SUPABASE_SECRET_KEY")
+    erros, _, _ = publicar.conferir(HfFalso(**nomes), "u/s")
+    assert any("SUPABASE_SECRET_KEY está cadastrada no Space" in e and "SÓ no GitHub" in e for e in erros)
+
+
+def test_conferencia_falta_supabase_no_space():
+    erros, _, _ = publicar.conferir(HfFalso(secrets=("OPENROUTER_API_KEY", "SUPABASE_URL")), "u/s")
+    assert any("Falta no Space: SUPABASE_PUBLISHABLE_KEY" in e for e in erros)
+
+
+def test_conferencia_base_desligada_nao_exige_supabase():
+    erros, _, _ = publicar.conferir(HfFalso(secrets=("OPENROUTER_API_KEY",)), "u/s", base_ativa=False)
+    assert erros == []
 
 
 # --------------------------------------------------------------- main()
