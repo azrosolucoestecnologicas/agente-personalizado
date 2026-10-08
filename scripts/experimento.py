@@ -8,7 +8,6 @@ como na função buscar_hibrido. Só escreve na coleção "teste". Será removid
 from __future__ import annotations
 
 import sys
-import time
 from pathlib import Path
 
 import numpy as np
@@ -100,56 +99,38 @@ def main() -> int:
         return acertos / len(perguntas), rr / len(perguntas), ",".join(erros) or "—"
 
     linhas = [
-        "| Modelo | Dim | Só sentido hit@3 | Híbrida hit@3 | MRR | Erros (híbrida) | Certos sim mín | Fora sim máx | Tempo |",
-        "|---|---|---|---|---|---|---|---|---|",
+        "| Pesos (pal/sent) | hit@3 | MRR | Erros | Certos sim mín | Fora sim (cada) |",
+        "|---|---|---|---|---|---|",
     ]
-    hibrida_e5 = None
-    for nome, pt, pq, arquivo, dim in MODELOS:
-        inicio = time.monotonic()
-        try:
-            m = motor(nome, arquivo, dim)
-            mt = normalizar(list(m.embed([pt + t.conteudo for t in trechos], batch_size=16)))
-            mq = normalizar(list(m.embed([pq + q for q in todas])))
-        except Exception as erro:  # noqa: BLE001
-            linhas.append(f"| {nome} | {dim} | erro: {type(erro).__name__}: {str(erro)[:80]} | | | | | | |")
-            continue
-        sims = mq @ mt.T
-        sentido = [list(np.argsort(-sims[n], kind="stable")[:CANDIDATOS]) for n in range(len(todas))]
-        hibrida = [rrf(palavras[n], sentido[n]) for n in range(len(todas))]
-        if nome == base.modelo_embedding:
-            hibrida_e5 = hibrida
-        h_s, _, _ = medir(sentido)
-        h_h, mrr, erros = medir(hibrida)
+    nome, pt, pq, arquivo, dim = MODELOS[2]  # e5-base
+    m = motor(nome, arquivo, dim)
+    mt = normalizar(list(m.embed([pt + t.conteudo for t in trechos], batch_size=16)))
+    mq = normalizar(list(m.embed([pq + q for q in todas])))
+    sims = mq @ mt.T
+    sentido = [list(np.argsort(-sims[n], kind="stable")[:CANDIDATOS]) for n in range(len(todas))]
+    fora = [float(sims[len(perguntas) + j].max()) for j in range(len(conjunto.fora_do_material))]
+    for pp in (1.0, 0.7, 0.5, 0.3, 0.2, 0.0):
+        hibrida = []
+        for n in range(len(todas)):
+            nota = {}
+            for pos, i in enumerate(palavras[n], 1):
+                nota[i] = nota.get(i, 0) + pp / (K + pos)
+            for pos, i in enumerate(sentido[n], 1):
+                nota[i] = nota.get(i, 0) + 1 / (K + pos)
+            hibrida.append(sorted(nota, key=lambda i: (-nota[i], i)))
+        h, mrr, erros = medir(hibrida)
         certos = [float(sims[n, i]) for n in range(len(perguntas)) for i in hibrida[n][:TOP] if certo(n, i)]
-        fora = [float(sims[len(perguntas) + j].max()) for j in range(len(conjunto.fora_do_material))]
         linhas.append(
-            f"| {nome.split('/')[-1]} | {dim} | {h_s:.2f} | {h_h:.2f} | {mrr:.3f} | {erros} | "
-            f"{min(certos, default=0):.3f} | {max(fora, default=0):.3f} | {time.monotonic() - inicio:.0f} s |"
+            f"| {pp}/1.0 | {h:.2f} | {mrr:.3f} | {erros} | {min(certos, default=0):.3f} | "
+            + ", ".join(f"{s:.3f}" for s in fora)
+            + " |"
         )
         print(linhas[-1], flush=True)
-
-    # Reranker sobre os 20 candidatos da busca híbrida atual (e5-small).
-    if hibrida_e5:
-        from fastembed.rerank.cross_encoder import TextCrossEncoder
-
-        inicio = time.monotonic()
-        rr = TextCrossEncoder(model_name=RERANKER)
-        reordenada, notas_topo = [], []
-        for n, texto in enumerate(todas):
-            cands = hibrida_e5[n][:CANDIDATOS]
-            notas = list(rr.rerank(texto, [trechos[i].conteudo for i in cands]))
-            ordem = sorted(range(len(cands)), key=lambda k: -notas[k])
-            reordenada.append([cands[k] for k in ordem])
-            notas_topo.append(max(notas))
-        h, mrr, erros = medir(reordenada)
-        certos_nota = [notas_topo[n] for n in range(len(perguntas)) if certo(n, reordenada[n][0])]
-        fora_nota = notas_topo[len(perguntas) :]
-        linhas.append(
-            f"| e5-small + reranker {RERANKER.split('/')[-1]} | 384 | — | {h:.2f} | {mrr:.3f} | {erros} | "
-            f"nota mín (1º certo) {min(certos_nota, default=0):.2f} | nota máx {max(fora_nota, default=0):.2f} | "
-            f"{time.monotonic() - inicio:.0f} s |"
-        )
-        print(linhas[-1], flush=True)
+    # Similaridade do trecho certo de cada pergunta (melhor posição) e do 1º colocado
+    for n, p in enumerate(conjunto.perguntas):
+        melhor = next((i for i in sentido[n] if certo(n, i)), None)
+        sc = f"{sims[n, melhor]:.3f}" if melhor is not None else "—"
+        linhas.append(f"| P{n + 1} | certo {sc} | 1º {sims[n, sentido[n][0]]:.3f} | | | |")
 
     texto = "## Experimento: modelos e reranker\n\n" + "\n".join(linhas)
     print(texto)
