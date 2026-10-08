@@ -60,11 +60,11 @@ ESTRUTURA: dict[str, Any] = {
 }
 
 # Modelos de embedding aceitos -> dimensão do vetor. Todos precisam ter a mesma
-# dimensão da coluna do banco (vector(384) no supabase/esquema.sql).
-DIMENSAO_EMBEDDING = 384
+# dimensão da coluna do banco (vector(768) no supabase/esquema.sql).
+DIMENSAO_EMBEDDING = 768
 MODELOS_EMBEDDING = {
-    "intfloat/multilingual-e5-small": 384,
-    "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2": 384,
+    "intfloat/multilingual-e5-base": 768,
+    "sentence-transformers/paraphrase-multilingual-mpnet-base-v2": 768,
 }
 MENSAGEM_NAO_ENCONTRADO = "Não encontrei isso no material do curso."
 CAMPOS_PROVEDOR = ("nome", "modelo")
@@ -89,7 +89,7 @@ class BaseConhecimento:
     """Bloco base_conhecimento do config.yaml (Parte 2). Ausente = desligada."""
 
     ativa: bool = False
-    modelo_embedding: str = "intfloat/multilingual-e5-small"
+    modelo_embedding: str = "intfloat/multilingual-e5-base"
     tamanho_trecho: int = 1500
     sobreposicao: int = 200
     trechos_por_resposta: int = 4

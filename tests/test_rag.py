@@ -35,17 +35,17 @@ def trecho(n: int, sim: float = 0.9, fonte: str = "parte2-rag.md", secao: str | 
 
 
 class GeradorFalso:
-    modelo = "intfloat/multilingual-e5-small"
+    modelo = "intfloat/multilingual-e5-base"
 
     def __init__(self):
         self.perguntas = []
 
     def trechos(self, textos):
-        return [[0.0] * 384 for _ in textos]
+        return [[0.0] * 768 for _ in textos]
 
     def pergunta(self, texto):
         self.perguntas.append(texto)
-        return [0.1] * 384
+        return [0.1] * 768
 
 
 class BancoFalso:
@@ -277,7 +277,7 @@ def test_t23_ao_iniciar_registra_quantos_trechos_ha_na_producao(config, monkeypa
     monkeypatch.setattr(agente.embeddings, "EmbeddingsFastembed", lambda modelo: GeradorFalso())
     with caplog.at_level(logging.INFO, logger="agente"):
         rag = criar_rag(config.base_conhecimento, {})
-    assert "Base de conhecimento: 3 trechos na produção (modelo intfloat/multilingual-e5-small)" in caplog.text
+    assert "Base de conhecimento: 3 trechos na produção (modelo intfloat/multilingual-e5-base)" in caplog.text
     assert rag.motivo_indisponivel == ""
 
 

@@ -34,13 +34,13 @@ CHAVE_ANTIGA = "eyJ" + "hbGciOiJIUzI1NiJ9.eyJyb2xlIjoiYW5vbiJ9.assinatura"
 
 
 def test_prefixos_do_e5():
-    modelo = "intfloat/multilingual-e5-small"
+    modelo = "intfloat/multilingual-e5-base"
     assert com_prefixo(modelo, ["oi"], "trecho") == ["passage: oi"]
     assert com_prefixo(modelo, ["oi"], "pergunta") == ["query: oi"]
 
 
 def test_modelo_sem_prefixo():
-    modelo = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    modelo = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
     assert com_prefixo(modelo, ["oi"], "pergunta") == ["oi"]
 
 
@@ -54,9 +54,9 @@ def test_e5_small_e_registrado_na_fastembed():
 
     from agente.embeddings import _registrar
 
-    _registrar("intfloat/multilingual-e5-small")
-    _registrar("intfloat/multilingual-e5-small")  # segunda vez não duplica
-    registrados = [m for m in TextEmbedding.list_supported_models() if m["model"] == "intfloat/multilingual-e5-small"]
+    _registrar("intfloat/multilingual-e5-base")
+    _registrar("intfloat/multilingual-e5-base")  # segunda vez não duplica
+    registrados = [m for m in TextEmbedding.list_supported_models() if m["model"] == "intfloat/multilingual-e5-base"]
     assert len(registrados) == 1
     assert registrados[0]["dim"] == DIMENSAO_EMBEDDING
 
@@ -100,7 +100,7 @@ def test_buscar_envia_argumentos_e_le_resultados():
         "pos_sentido": 1,
     }
     banco, pedidos = banco_simulado(lambda p: httpx.Response(200, json=[linha]))
-    resultados = banco.buscar("pergunta", [0.5] * 384, quantidade=3, peso_palavras=0.0, colecao="teste")
+    resultados = banco.buscar("pergunta", [0.5] * DIMENSAO_EMBEDDING, quantidade=3, peso_palavras=0.0, colecao="teste")
     assert pedidos[0].url.path == "/rest/v1/rpc/buscar_hibrido"
     corpo = json.loads(pedidos[0].content)
     assert corpo["p_colecao"] == "teste" and corpo["quantidade"] == 3 and corpo["peso_palavras"] == 0.0
@@ -120,7 +120,14 @@ def test_contar_le_o_total_do_cabecalho():
 def test_gravar_em_lotes():
     banco, pedidos = banco_simulado(lambda p: httpx.Response(201))
     linhas = [
-        {"colecao": "teste", "fonte": "a.md", "secao": "S", "ordem": i, "conteudo": "x", "embedding": [0.0] * 384}
+        {
+            "colecao": "teste",
+            "fonte": "a.md",
+            "secao": "S",
+            "ordem": i,
+            "conteudo": "x",
+            "embedding": [0.0] * DIMENSAO_EMBEDDING,
+        }
         for i in range(120)
     ]
     assert banco.gravar(linhas, lote=50) == 120
@@ -141,7 +148,7 @@ def test_gravar_recusa_colecao_invalida():
         (401, {"message": "Invalid API key"}, "chave foi recusada"),
         (403, {"message": "permission denied for function promover_teste"}, "Permissão negada"),
         (404, {"message": "Could not find the function public.buscar_hibrido"}, "esquema.sql"),
-        (400, {"message": "expected 384 dimensions, not 768"}, "384 números"),
+        (400, {"message": "expected 768 dimensions, not 384"}, "tamanho que o banco espera"),
         (503, {"message": "upstream"}, "pausado"),
     ],
 )
@@ -182,7 +189,7 @@ def test_vetor_texto():
 
 
 class GeradorFalso:
-    modelo = "intfloat/multilingual-e5-small"
+    modelo = "intfloat/multilingual-e5-base"
 
     def __init__(self, falhar=False):
         self.falhar = falhar
@@ -240,7 +247,9 @@ def test_indexar_regrava_so_a_colecao_teste():
     assert banco.chamadas == ["limpar", "gravar"]
     novos = [linha for linha in banco.linhas if linha["colecao"] == "teste"]
     assert len(novos) == 124
-    assert all(linha["modelo"] == GeradorFalso.modelo and len(linha["embedding"]) == 384 for linha in novos)
+    assert all(
+        linha["modelo"] == GeradorFalso.modelo and len(linha["embedding"]) == DIMENSAO_EMBEDDING for linha in novos
+    )
     assert [linha for linha in banco.linhas if linha["colecao"] == "producao"] == [
         {"colecao": "producao", "fonte": "no-ar.md"}
     ]

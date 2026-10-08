@@ -116,13 +116,13 @@ jobs:
       - name: Instalar bibliotecas
         run: pip install -r requirements.txt
 
-      # O modelo tem ~470 MB: guardado entre execuções para não baixar toda vez.
+      # O modelo tem ~1,1 GB: guardado entre execuções para não baixar toda vez.
       - name: Reaproveitar o modelo de embedding
         id: modelo
         uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/modelos
-          key: modelos-e5-small-${{ hashFiles('requirements.txt') }}
+          key: modelos-e5-base-${{ hashFiles('requirements.txt') }}
 
       - name: Experimento de calibração (temporário)
         env:
@@ -151,7 +151,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ${{ runner.temp }}/modelos
-          key: modelos-e5-small-${{ hashFiles('requirements.txt') }}
+          key: modelos-e5-base-${{ hashFiles('requirements.txt') }}
 
   publicar:
     name: publicar

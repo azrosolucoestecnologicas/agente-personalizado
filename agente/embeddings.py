@@ -1,6 +1,6 @@
-"""Embeddings: transforma texto em 384 números (spec da Parte 2, seção 2).
+"""Embeddings: transforma texto em 768 números (spec da Parte 2, seção 2).
 
-Usa a fastembed (ONNX, sem PyTorch). O e5-small não vem pronto na lista da
+Usa a fastembed (ONNX, sem PyTorch). O e5-base não vem pronto na lista da
 fastembed, então é registrado como modelo próprio, apontando para o arquivo
 onnx/model.onnx do repositório oficial no Hugging Face.
 
@@ -18,11 +18,11 @@ from agente.config import DIMENSAO_EMBEDDING, MODELOS_EMBEDDING
 
 # Modelo -> (prefixo do trecho, prefixo da pergunta). Modelos fora daqui não usam prefixo.
 PREFIXOS = {
-    "intfloat/multilingual-e5-small": ("passage: ", "query: "),
+    "intfloat/multilingual-e5-base": ("passage: ", "query: "),
 }
 # Modelos que a fastembed não traz prontos: registrados na primeira vez que forem usados.
 MODELOS_PROPRIOS = {
-    "intfloat/multilingual-e5-small": "onnx/model.onnx",
+    "intfloat/multilingual-e5-base": "onnx/model.onnx",
 }
 LOTE = 32  # trechos por vez: equilibra memória e velocidade
 
@@ -65,7 +65,7 @@ def _registrar(modelo: str) -> None:
 
 
 class EmbeddingsFastembed:
-    """Gera os vetores com a fastembed. Na primeira vez, baixa o modelo (~470 MB)."""
+    """Gera os vetores com a fastembed. Na primeira vez, baixa o modelo (~1,1 GB)."""
 
     def __init__(self, modelo: str, pasta_cache: str | None = None):
         if modelo not in MODELOS_EMBEDDING:

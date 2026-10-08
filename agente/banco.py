@@ -22,7 +22,7 @@ import httpx
 from agente.segredos import ocultar_chaves
 
 COLECOES = ("teste", "producao")
-LOTE_GRAVACAO = 50  # trechos por requisição: cada um carrega 384 números
+LOTE_GRAVACAO = 50  # trechos por requisição: cada um carrega 768 números
 
 
 class ErroBanco(Exception):
@@ -94,7 +94,7 @@ class Banco:
         elif codigo == 404 or "Could not find the function" in detalhe:
             dica = "Tabela ou função não encontrada: rode o supabase/esquema.sql no SQL Editor."
         elif "dimensions" in detalhe:
-            dica = "O vetor não tem 384 números: o modelo de embedding não é o mesmo do banco."
+            dica = "O vetor não tem o tamanho que o banco espera: o modelo de embedding não é o mesmo do banco."
         elif codigo >= 500:
             dica = "Erro no servidor do Supabase (o projeto pode estar pausado ou reiniciando)."
         else:

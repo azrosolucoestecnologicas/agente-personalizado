@@ -48,7 +48,7 @@ exemplos:                       # até 6 perguntas; viram botões na tela
 
 base_conhecimento:              # Parte 2: o assistente consulta os documentos da pasta documentos/
   ativa: true                   # false = volta a responder só com o que o modelo sabe (Parte 1)
-  modelo_embedding: "intfloat/multilingual-e5-small"   # o mesmo na indexação e na pergunta
+  modelo_embedding: "intfloat/multilingual-e5-base"   # o mesmo na indexação e na pergunta
   tamanho_trecho: 1500          # máximo de caracteres por trecho (300 a 3000; ~350 tokens)
   sobreposicao: 200             # caracteres repetidos ao subdividir seções longas (até metade do trecho)
   trechos_por_resposta: 4       # quantos trechos vão para o modelo (1 a 10; a apostila sugere 3 a 5)

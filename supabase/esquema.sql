@@ -32,11 +32,24 @@ create table if not exists public.trechos (
   secao       text not null,                   -- ex.: 09 Chunking: dividir para achar
   ordem       int  not null,                   -- posição do trecho dentro do documento
   conteudo    text not null,                   -- texto do trecho (começa com o título da seção)
-  embedding   extensions.vector(384) not null, -- e5-small: 384 dimensões, normalizado
+  embedding   extensions.vector(768) not null, -- e5-base: 768 dimensões, normalizado
   modelo      text not null,                   -- modelo que gerou o vetor
   texto_busca tsvector generated always as (to_tsvector('public.pt_sem_acento'::regconfig, conteudo)) stored,
   criado_em   timestamptz not null default now()
 );
+-- Troca de modelo: a 1ª versão usava o e5-small (384 números); agora é o e5-base (768).
+-- Se a coluna ainda tiver outro tamanho, os vetores antigos não servem para o modelo
+-- novo: apaga os trechos (o próximo indexar.py regrava) e muda o tamanho da coluna.
+-- Com a coluna já em 768, este bloco não faz nada.
+do $$
+begin
+  if (select atttypmod from pg_attribute
+      where attrelid = 'public.trechos'::regclass and attname = 'embedding') <> 768 then
+    delete from public.trechos;
+    alter table public.trechos alter column embedding type extensions.vector(768);
+  end if;
+end $$;
+
 create index if not exists trechos_colecao_idx on public.trechos (colecao);
 create index if not exists trechos_texto_busca_idx on public.trechos using gin (texto_busca);
 -- Sem índice HNSW: com centenas de trechos, a busca exata é rápida e sempre certa.
@@ -50,7 +63,7 @@ comment on table public.trechos is
 -- a RLS só deixa passar linhas 'producao', mesmo que peçam p_colecao => 'teste'.
 create or replace function public.buscar_hibrido(
   consulta text,
-  consulta_embedding extensions.vector(384),
+  consulta_embedding extensions.vector(768),
   quantidade int default 4,
   peso_palavras float default 1.0,
   peso_sentido float default 1.0,

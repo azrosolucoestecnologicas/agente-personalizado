@@ -93,7 +93,7 @@ def main(argv: list[str] | None = None, gerador: GeradorEmbeddings | None = None
             if gerador is None:
                 from agente.embeddings import EmbeddingsFastembed
 
-                print(f"→ Carregando o modelo {base.modelo_embedding} (na primeira vez, baixa ~470 MB)...", flush=True)
+                print(f"→ Carregando o modelo {base.modelo_embedding} (na primeira vez, baixa ~1,1 GB)...", flush=True)
                 gerador = EmbeddingsFastembed(base.modelo_embedding)
             relatorio = indexar(banco, gerador, base)
     except (ErroConfig, ErroBanco, ErroEmbedding) as erro:

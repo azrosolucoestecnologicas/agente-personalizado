@@ -379,7 +379,7 @@ def _carregar(projeto: Path, dados: dict):
 def test_t18_config_do_projeto_tem_a_base_ligada():
     base = carregar_config().base_conhecimento
     assert base.ativa is True
-    assert base.modelo_embedding == "intfloat/multilingual-e5-small"
+    assert base.modelo_embedding == "intfloat/multilingual-e5-base"
     assert base.mensagem_nao_encontrado == "Não encontrei isso no material do curso."
 
 
