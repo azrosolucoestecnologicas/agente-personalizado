@@ -6,13 +6,15 @@ este próprio arquivo não seja apontado pela varredura.
 
 from __future__ import annotations
 
+import base64
+import json
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
-from agente.segredos import procurar_em_texto, tem_chave
+from agente.segredos import TIPO_JWT_SECRETO, ocultar_chaves, procurar_em_texto, tem_chave
 
 RAIZ = Path(__file__).resolve().parent.parent
 SCRIPT = RAIZ / "scripts" / "procurar_chaves.py"
@@ -23,6 +25,7 @@ CHAVES_FALSAS = {
     "chave da OpenAI": "sk-" + "proj-" + "Xy9-" * 10,
     "chave no formato sk-": "sk-" + "A1b2C3d4" * 5,
     "token do Hugging Face": "hf" + "_" + "AbCdEfGhIj" * 4,
+    "chave secreta do Supabase": "sb_" + "secret_" + "Qw3-Er5_Ty7" * 3,
 }
 
 
@@ -196,3 +199,54 @@ def test_lista_de_falsas_so_tem_hashes():
     from agente.segredos import FALSAS_CONHECIDAS
 
     assert all(len(h) == 64 and all(c in "0123456789abcdef" for c in h) for h in FALSAS_CONHECIDAS)
+
+
+# ------------------------------------------------ T22: chaves do Supabase
+
+
+def jwt_falso(papel: str) -> str:
+    """JWT montado na hora (o arquivo de teste não guarda nenhum pronto)."""
+
+    def parte(dados: dict) -> str:
+        return base64.urlsafe_b64encode(json.dumps(dados).encode()).decode().rstrip("=")
+
+    cabecalho = parte({"alg": "HS256", "typ": "JWT"})
+    miolo = parte({"iss": "supabase", "ref": "projetoexemplo", "role": papel, "iat": 1700000000})
+    return f"{cabecalho}.{miolo}.{'AssinaturaFalsa_' * 3}"
+
+
+def test_t22_detecta_jwt_service_role():
+    achados = procurar_em_texto(f'SUPABASE_KEY = "{jwt_falso("service_role")}"')
+    assert [a.tipo for a in achados] == [TIPO_JWT_SECRETO]
+
+
+def test_t22_jwt_anon_nao_e_segredo():
+    assert not tem_chave(f'chave_publica = "{jwt_falso("anon")}"')
+
+
+def test_t22_nao_acusa_chave_publicavel():
+    assert not tem_chave('url = "https://projeto.supabase.co"  # sb_publishable_' + "Abc123" * 5)
+
+
+def test_t22_detecta_chave_secreta_escrita_direto_no_codigo():
+    assert [a.tipo for a in procurar_em_texto("SUPABASE_SECRET_KEY=" + "x7" * 12)] == ["chave escrita direto no código"]
+
+
+def test_t22_ler_do_ambiente_nao_e_acusado():
+    assert not tem_chave('chave = os.environ["SUPABASE_SECRET_KEY"]')
+
+
+def test_t22_ocultar_chaves_esconde_as_do_supabase():
+    secreta, jwt = CHAVES_FALSAS["chave secreta do Supabase"], jwt_falso("service_role")
+    anon = jwt_falso("anon")
+    texto = ocultar_chaves(f"erro com {secreta} e {jwt}; a pública {anon} pode aparecer")
+    assert secreta not in texto and jwt not in texto
+    assert anon in texto
+
+
+def test_t22_script_bloqueia_chave_secreta_do_supabase(tmp_path):
+    (tmp_path / "indexar.py").write_text(f'CHAVE = "{jwt_falso("service_role")}"\n', encoding="utf-8")
+    resultado = rodar(tmp_path)
+    assert resultado.returncode == 1
+    assert "service_role" in resultado.stdout
+    assert "indexar.py" in resultado.stdout
