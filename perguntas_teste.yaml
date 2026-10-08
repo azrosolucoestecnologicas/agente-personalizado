@@ -1,0 +1,88 @@
+# ============================================================
+#  PERGUNTAS DE TESTE (golden set) da busca da Parte 2
+#
+#  Antes de publicar, o job "avaliar" faz cada pergunta à busca, na
+#  coleção "teste" do Supabase. Se o hit rate@top_k ficar abaixo do
+#  limiar, nada é publicado e o assistente no ar segue como estava.
+#
+#  Cada pergunta diz ONDE está a resposta:
+#   - fonte_esperada: o arquivo em documentos/
+#   - secao_esperada: um pedaço do título da seção (maiúsculas e acentos não importam)
+#
+#  Dicas:
+#   - Misture perguntas com as palavras do texto e com OUTRAS palavras
+#     (as segundas testam a busca por sentido).
+#   - Toda pergunta que o assistente errar no ar vira uma pergunta aqui.
+# ============================================================
+
+limiar_hit_rate: 0.80   # abaixo disso, o job avaliar barra a publicação (0 a 1)
+top_k: 3                # o trecho esperado precisa aparecer entre os 3 primeiros (1 a 10)
+
+perguntas:
+  # --- Apostila da Parte 1: CI/CD e deploy -------------------------------
+  - pergunta: "Onde eu cadastro o HF_TOKEN?"
+    fonte_esperada: parte1-cicd-deploy.md
+    secao_esperada: "Segredos: onde fica cada chave"
+
+  - pergunta: "Onde guardo a credencial que publica os arquivos no Hugging Face?"   # outras palavras
+    fonte_esperada: parte1-cicd-deploy.md
+    secao_esperada: "Segredos: onde fica cada chave"
+
+  - pergunta: "O que é CI/CD?"
+    fonte_esperada: parte1-cicd-deploy.md
+    secao_esperada: "CI/CD"
+
+  - pergunta: "Por que o meu código é testado num computador que é apagado no final?"   # outras palavras
+    fonte_esperada: parte1-cicd-deploy.md
+    secao_esperada: "máquina descartável"
+
+  - pergunta: "O que é deploy?"
+    fonte_esperada: parte1-cicd-deploy.md
+    secao_esperada: "O que é deploy"
+
+  - pergunta: "Por que o assistente perde a conversa quando eu fecho a aba do navegador?"   # outras palavras
+    fonte_esperada: parte1-cicd-deploy.md
+    secao_esperada: "Por que o chat esquece"
+
+  # --- Apostila da Parte 2: RAG ------------------------------------------
+  - pergunta: "Para que serve o RRF?"
+    fonte_esperada: parte2-rag.md
+    secao_esperada: "Recuperação híbrida e RRF"
+
+  - pergunta: "Como juntar o resultado da busca por palavras com o da busca por significado?"   # outras palavras
+    fonte_esperada: parte2-rag.md
+    secao_esperada: "Recuperação híbrida e RRF"
+
+  - pergunta: "O que é similaridade do cosseno?"
+    fonte_esperada: parte2-rag.md
+    secao_esperada: "Como medir proximidade"
+
+  - pergunta: "Por que não transformar a apostila inteira num único vetor?"   # outras palavras
+    fonte_esperada: parte2-rag.md
+    secao_esperada: "Chunking: dividir para achar"
+
+  - pergunta: "O que são hit rate e MRR?"
+    fonte_esperada: parte2-rag.md
+    secao_esperada: "Avaliar o RAG"
+
+  - pergunta: "Qual chave do banco vai para o Space e qual fica só no GitHub?"   # outras palavras
+    fonte_esperada: parte2-rag.md
+    secao_esperada: "Segredos: cada chave com quem executa"
+
+  # --- Perguntas impossíveis (critério de aceite) --------------------------
+  # Descomente as QUATRO abaixo e faça commit: o hit rate cai para 12/16 = 0,75,
+  # abaixo do limiar de 0,80. O job "avaliar" fica vermelho, o "publicar" não
+  # roda e o assistente no ar continua como antes. (Com só duas, daria 12/14 =
+  # 0,86 e o portão passaria: o limiar mede a proporção, não cada pergunta.)
+  # - pergunta: "Qual é a receita do bolo de cenoura da vovó?"
+  #   fonte_esperada: parte2-rag.md
+  #   secao_esperada: "Por que 384 números e não 3?"
+  # - pergunta: "Quem ganhou a Copa do Mundo de 1970?"
+  #   fonte_esperada: parte1-cicd-deploy.md
+  #   secao_esperada: "Aviso não é erro"
+  # - pergunta: "Qual a melhor época para plantar tomate?"
+  #   fonte_esperada: parte2-rag.md
+  #   secao_esperada: "Etapa 4: uma tarefa por vez"
+  # - pergunta: "Quantos planetas tem o sistema solar?"
+  #   fonte_esperada: parte1-cicd-deploy.md
+  #   secao_esperada: "A frase que resume o problema"

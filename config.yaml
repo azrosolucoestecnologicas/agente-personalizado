@@ -46,3 +46,14 @@ exemplos:                       # até 6 perguntas; viram botões na tela
   - "Qual a diferença entre data lake e data warehouse?"
   - "Como funciona um modelo de linguagem?"
   - "O que é ETL e ELT?"
+
+base_conhecimento:              # Parte 2: o assistente consulta os documentos da pasta documentos/
+  ativa: true                   # false = volta a responder só com o que o modelo sabe (Parte 1)
+  modelo_embedding: "intfloat/multilingual-e5-small"   # o mesmo na indexação e na pergunta
+  tamanho_trecho: 1500          # máximo de caracteres por trecho (300 a 3000; ~350 tokens)
+  sobreposicao: 200             # caracteres repetidos ao subdividir seções longas (até metade do trecho)
+  trechos_por_resposta: 4       # quantos trechos vão para o modelo (1 a 10; a apostila sugere 3 a 5)
+  peso_palavras: 1.0            # peso da busca por palavras no RRF (0 desliga)
+  peso_sentido: 1.0             # peso da busca por sentido no RRF (0 desliga)
+  similaridade_minima: 0.80     # abaixo disso o trecho é descartado (provisório: calibrado na tarefa 5)
+  mensagem_nao_encontrado: "Não encontrei isso no material do curso."

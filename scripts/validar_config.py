@@ -28,6 +28,16 @@ def escrever_resumo_actions(texto: str) -> None:
             arquivo.write(texto + "\n")
 
 
+def _resumo_base(config) -> str:
+    base = config.base_conhecimento
+    if not base.ativa:
+        return "desligada"
+    return (
+        f"ligada ({base.modelo_embedding}; trechos de até {base.tamanho_trecho} caracteres; "
+        f"{base.trechos_por_resposta} por resposta; pesos palavras {base.peso_palavras} / sentido {base.peso_sentido})"
+    )
+
+
 def main(argv: list[str]) -> int:
     caminho = Path(argv[1]) if len(argv) > 1 else ARQUIVO_PADRAO
     try:
@@ -48,7 +58,8 @@ def main(argv: list[str]) -> int:
         f"   Cores: {config.cor_principal} → {config.cor_secundaria} (destaque {config.cor_destaque})\n"
         f"   Logo: {config.logo.relative_to(caminho.resolve().parent).as_posix()} ({config.logo_altura}px)\n"
         f"   Provedores: {provedores}\n"
-        f"   Exemplos: {len(config.exemplos)}"
+        f"   Exemplos: {len(config.exemplos)}\n"
+        f"   Base de conhecimento: {_resumo_base(config)}"
     )
     print(mensagem)
     escrever_resumo_actions(f"## ✅ {caminho.name} está correto\n\n```\n{mensagem}\n```")

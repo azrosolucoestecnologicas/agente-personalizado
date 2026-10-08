@@ -361,3 +361,77 @@ def test_cor_destaque_opcional_usa_a_principal(projeto):
 def test_cor_destaque_validada(projeto):
     assert "`aparencia.cor_destaque`" in erros_de(com(aparencia__cor_destaque="vermelho"), projeto)
     assert validar(com(aparencia__cor_destaque="#E0262B"), projeto) == []
+
+
+# ------------------------------------------- T18: bloco base_conhecimento
+
+
+def _com_base(**campos) -> dict:
+    return com(base_conhecimento=campos)
+
+
+def _carregar(projeto: Path, dados: dict):
+    arquivo = projeto / "config.yaml"
+    arquivo.write_text(yaml.safe_dump(dados, allow_unicode=True), encoding="utf-8")
+    return carregar_config(arquivo)
+
+
+def test_t18_config_do_projeto_tem_a_base_ligada():
+    base = carregar_config().base_conhecimento
+    assert base.ativa is True
+    assert base.modelo_embedding == "intfloat/multilingual-e5-small"
+    assert base.mensagem_nao_encontrado == "Não encontrei isso no material do curso."
+
+
+def test_t18_sem_o_bloco_a_base_fica_desligada(projeto):
+    assert _carregar(projeto, CONFIG_BASE).base_conhecimento.ativa is False
+
+
+def test_t18_bloco_presente_liga_a_base_com_os_padroes(projeto):
+    base = _carregar(projeto, _com_base()).base_conhecimento
+    assert base.ativa is True
+    assert (base.tamanho_trecho, base.sobreposicao, base.trechos_por_resposta) == (1500, 200, 4)
+    assert (base.peso_palavras, base.peso_sentido, base.similaridade_minima) == (1.0, 1.0, 0.80)
+
+
+def test_t18_ativa_false_desliga(projeto):
+    assert _carregar(projeto, _com_base(ativa=False)).base_conhecimento.ativa is False
+
+
+def test_t18_valores_personalizados(projeto):
+    dados = _com_base(tamanho_trecho=800, sobreposicao=100, peso_palavras=0, peso_sentido=2)
+    base = _carregar(projeto, dados).base_conhecimento
+    assert (base.tamanho_trecho, base.sobreposicao, base.peso_palavras, base.peso_sentido) == (800, 100, 0.0, 2.0)
+    assert isinstance(base.peso_palavras, float)
+
+
+@pytest.mark.parametrize(
+    "campos,esperado",
+    [
+        ({"ativa": "sim"}, "Use true (ligada) ou false"),
+        ({"modelo_embedding": "text-embedding-3-small"}, "não é aceito"),
+        ({"tamanho_trecho": 100}, "`base_conhecimento.tamanho_trecho`"),
+        ({"tamanho_trecho": 5000}, "`base_conhecimento.tamanho_trecho`"),
+        ({"sobreposicao": -1}, "`base_conhecimento.sobreposicao`"),
+        ({"tamanho_trecho": 1000, "sobreposicao": 600}, "mais da metade do tamanho_trecho (1000)"),
+        ({"trechos_por_resposta": 0}, "`base_conhecimento.trechos_por_resposta`"),
+        ({"trechos_por_resposta": 11}, "`base_conhecimento.trechos_por_resposta`"),
+        ({"peso_palavras": -0.5}, "`base_conhecimento.peso_palavras`"),
+        ({"peso_sentido": "alto"}, "`base_conhecimento.peso_sentido`"),
+        ({"peso_palavras": 0, "peso_sentido": 0}, "não podem ser os dois zero"),
+        ({"similaridade_minima": 1.5}, "`base_conhecimento.similaridade_minima`"),
+        ({"mensagem_nao_encontrado": "x"}, "`base_conhecimento.mensagem_nao_encontrado`"),
+        ({"tamanho_trecos": 900}, "Você quis dizer `base_conhecimento.tamanho_trecho`?"),
+    ],
+)
+def test_t18_valores_invalidos(campos, esperado, projeto):
+    assert esperado in erros_de(_com_base(**campos), projeto)
+
+
+def test_t18_bloco_que_nao_e_secao(projeto):
+    assert "deve conter campos recuados" in erros_de(com(base_conhecimento="sim"), projeto)
+
+
+def test_t18_um_peso_zero_e_permitido(projeto):
+    assert validar(_com_base(peso_palavras=0), projeto) == []
+    assert validar(_com_base(peso_sentido=0), projeto) == []

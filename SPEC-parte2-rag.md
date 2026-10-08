@@ -101,6 +101,7 @@ agente-personalizado/
 │   ├── indexar.py                      🆕 monta a coleção teste; com --promover, vira producao
 │   ├── avaliar.py                      🆕 roda as perguntas de teste e aplica o limiar (T25)
 │   ├── validar_documentos.py          🆕 confere a pasta documentos/ (T19), com resumo no Actions
+│   ├── validar_perguntas.py           🆕 confere o perguntas_teste.yaml (T21), sem rede
 │   └── publicar.py                     ✏️ envia documentos/; confere secrets do Supabase no Space
 ├── tests/
 │   ├── test_documentos.py              🆕 T19 e T20
@@ -385,6 +386,7 @@ perguntas:
   #   fonte_esperada: parte2-rag.md
   #   secao_esperada: "Glossário"
 ```
+- **Perguntas impossíveis comentadas: são 4**, não 2. O limiar mede a proporção: com 12 certas e só 2 impossíveis, o hit rate seria 12/14 = 0,86, acima de 0,80, e o portão passaria. Com 4, cai para 12/16 = 0,75. Elas apontam para seções pequenas e sem relação com a pergunta, para não serem acertadas por acaso.
 - **Começo com 12 perguntas**, cobrindo as duas apostilas. Metade usa as palavras do texto e metade usa **outras palavras**, para testar a busca por sentido.
 - A apostila recomenda de 5 a 10 perguntas por documento; o arquivo deve crescer com o tempo: **toda pergunta que o assistente errar no ar vira uma pergunta de teste**.
 

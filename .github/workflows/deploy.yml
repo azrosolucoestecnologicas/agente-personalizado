@@ -38,12 +38,16 @@ jobs:
 
       # "!cancelled()" faz as verificações seguintes rodarem mesmo se uma
       # anterior falhar, para você ver TODOS os problemas de uma vez.
-      - name: "T1–T7: conferir o config.yaml"
+      - name: "T1–T7 e T18: conferir o config.yaml"
         run: python scripts/validar_config.py
 
       - name: "T19: conferir a pasta documentos/"
         if: ${{ !cancelled() }}
         run: python scripts/validar_documentos.py
+
+      - name: "T21: conferir as perguntas de teste"
+        if: ${{ !cancelled() }}
+        run: python scripts/validar_perguntas.py
 
       - name: "T8: procurar chaves de API no código"
         if: ${{ !cancelled() }}

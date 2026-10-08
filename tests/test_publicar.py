@@ -47,6 +47,7 @@ def test_job_testes_roda_todas_as_verificacoes(workflow):
         "pip install -r requirements-dev.txt",
         "python scripts/validar_config.py",  # T1–T7
         "python scripts/validar_documentos.py",  # T19
+        "python scripts/validar_perguntas.py",  # T21
         "python scripts/procurar_chaves.py",  # T8
         "python scripts/procurar_chaves.py --historico",  # T8 (commits antigos)
         "ruff check .",  # T17

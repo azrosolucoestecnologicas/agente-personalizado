@@ -46,7 +46,27 @@ ESTRUTURA: dict[str, Any] = {
     },
     "comportamento": {"instrucoes": None},
     "exemplos": None,
+    "base_conhecimento": {
+        "ativa": None,
+        "modelo_embedding": None,
+        "tamanho_trecho": None,
+        "sobreposicao": None,
+        "trechos_por_resposta": None,
+        "peso_palavras": None,
+        "peso_sentido": None,
+        "similaridade_minima": None,
+        "mensagem_nao_encontrado": None,
+    },
 }
+
+# Modelos de embedding aceitos -> dimensão do vetor. Todos precisam ter a mesma
+# dimensão da coluna do banco (vector(384) no supabase/esquema.sql).
+DIMENSAO_EMBEDDING = 384
+MODELOS_EMBEDDING = {
+    "intfloat/multilingual-e5-small": 384,
+    "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2": 384,
+}
+MENSAGEM_NAO_ENCONTRADO = "Não encontrei isso no material do curso."
 CAMPOS_PROVEDOR = ("nome", "modelo")
 
 
@@ -62,6 +82,21 @@ class ErroConfig(Exception):
 class Provedor:
     nome: str
     modelo: str
+
+
+@dataclass(frozen=True)
+class BaseConhecimento:
+    """Bloco base_conhecimento do config.yaml (Parte 2). Ausente = desligada."""
+
+    ativa: bool = False
+    modelo_embedding: str = "intfloat/multilingual-e5-small"
+    tamanho_trecho: int = 1500
+    sobreposicao: int = 200
+    trechos_por_resposta: int = 4
+    peso_palavras: float = 1.0
+    peso_sentido: float = 1.0
+    similaridade_minima: float = 0.80
+    mensagem_nao_encontrado: str = MENSAGEM_NAO_ENCONTRADO
 
 
 @dataclass(frozen=True)
@@ -81,6 +116,7 @@ class Config:
     instrucoes: str
     exemplos: list[str] = field(default_factory=list)
     cor_destaque: str = ""  # botões e detalhes; vazio = usa a cor_principal
+    base_conhecimento: BaseConhecimento = field(default_factory=BaseConhecimento)
 
 
 # ------------------------------------------------------------------ leitura
@@ -189,7 +225,47 @@ def validar(dados: Any, raiz: Path) -> list[str]:
 
     # exemplos
     _exemplos(dados, erros)
+
+    # base de conhecimento (Parte 2): opcional
+    if dados.get("base_conhecimento") is not None:
+        _base_conhecimento(dados["base_conhecimento"], erros)
     return erros
+
+
+def _base_conhecimento(base: Any, erros: list[str]) -> None:
+    """T18: valida o bloco base_conhecimento."""
+    if not isinstance(base, dict):
+        erros.append("❌ `base_conhecimento`: deve conter campos recuados abaixo dele (2 espaços).")
+        return
+    ativa = base.get("ativa")
+    if ativa is not None and not isinstance(ativa, bool):
+        erros.append(f'❌ `base_conhecimento.ativa`: "{ativa}" não é aceito. Use true (ligada) ou false (desligada).')
+    modelo = base.get("modelo_embedding")
+    if modelo is not None and modelo not in MODELOS_EMBEDDING:
+        aceitos = ", ".join(MODELOS_EMBEDDING)
+        erros.append(
+            f'❌ `base_conhecimento.modelo_embedding`: "{modelo}" não é aceito. Use um destes: {aceitos}. '
+            f"Eles geram vetores de {DIMENSAO_EMBEDDING} números, o tamanho da coluna no banco."
+        )
+    _inteiro(base, "base_conhecimento.tamanho_trecho", 300, 3000, erros)
+    _inteiro(base, "base_conhecimento.sobreposicao", 0, 1500, erros)
+    tamanho = base.get("tamanho_trecho") if _eh_inteiro(base.get("tamanho_trecho")) else 1500
+    sobreposicao = base.get("sobreposicao")
+    if _eh_inteiro(sobreposicao) and 0 <= sobreposicao <= 1500 and sobreposicao > tamanho // 2:
+        erros.append(
+            f"❌ `base_conhecimento.sobreposicao`: {sobreposicao} é mais da metade do tamanho_trecho ({tamanho}). "
+            f"Use no máximo {tamanho // 2} (a apostila recomenda de 10% a 20%)."
+        )
+    _inteiro(base, "base_conhecimento.trechos_por_resposta", 1, 10, erros)
+    _numero(base, "base_conhecimento.peso_palavras", 0.0, 5.0, erros)
+    _numero(base, "base_conhecimento.peso_sentido", 0.0, 5.0, erros)
+    if base.get("peso_palavras") == 0 and base.get("peso_sentido") == 0:
+        erros.append(
+            "❌ `base_conhecimento`: peso_palavras e peso_sentido não podem ser os dois zero; "
+            "isso desligaria a busca inteira. Deixe pelo menos um maior que zero."
+        )
+    _numero(base, "base_conhecimento.similaridade_minima", 0.0, 1.0, erros)
+    _texto(base, "base_conhecimento.mensagem_nao_encontrado", obrigatorio=False, minimo=5, maximo=200, erros=erros)
 
 
 def _secao(dados: dict, nome: str, erros: list[str]) -> dict:
@@ -423,4 +499,19 @@ def _montar(dados: dict, raiz: Path) -> Config:
         ),
         instrucoes=c["instrucoes"].strip(),
         exemplos=[e.strip() for e in dados.get("exemplos") or []],
+        base_conhecimento=_montar_base(dados.get("base_conhecimento")),
     )
+
+
+def _montar_base(base: dict | None) -> BaseConhecimento:
+    """Aplica os padrões. Seção presente sem 'ativa' = ligada; seção ausente = desligada."""
+    if base is None:
+        return BaseConhecimento()
+    padrao = BaseConhecimento()
+    valores = {campo: base[campo] for campo in ESTRUTURA["base_conhecimento"] if base.get(campo) is not None}
+    if "mensagem_nao_encontrado" in valores:
+        valores["mensagem_nao_encontrado"] = valores["mensagem_nao_encontrado"].strip()
+    for campo in ("peso_palavras", "peso_sentido", "similaridade_minima"):
+        if campo in valores:
+            valores[campo] = float(valores[campo])
+    return BaseConhecimento(**{**padrao.__dict__, "ativa": True, **valores})
