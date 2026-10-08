@@ -86,3 +86,15 @@ perguntas:
   # - pergunta: "Quantos planetas tem o sistema solar?"
   #   fonte_esperada: parte1-cicd-deploy.md
   #   secao_esperada: "A frase que resume o problema"
+
+# --- Fora do material (calibração) -----------------------------------------
+# Perguntas cuja resposta NÃO está nas apostilas. Não contam no hit rate.
+# O job "avaliar" mostra a similaridade que elas alcançam: a similaridade_minima
+# do config.yaml deve ficar ACIMA delas e abaixo dos trechos certos acima.
+fora_do_material:
+  - "Qual é a capital da Austrália?"
+  - "Como faço um bolo de chocolate?"
+  - "Quem pintou a Mona Lisa?"
+  - "Qual a previsão do tempo para amanhã em São Paulo?"
+  - "Quantos jogadores tem um time de vôlei?"
+  - "Como declarar o imposto de renda?"

@@ -10,7 +10,7 @@ from __future__ import annotations
 import difflib
 import re
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +21,7 @@ from agente.documentos import PASTA_PADRAO, ler_titulos
 
 ARQUIVO_PADRAO = RAIZ_PROJETO / "perguntas_teste.yaml"
 MINIMO_PERGUNTAS = 5
-CAMPOS_RAIZ = ("limiar_hit_rate", "top_k", "perguntas")
+CAMPOS_RAIZ = ("limiar_hit_rate", "top_k", "perguntas", "fora_do_material")
 CAMPOS_PERGUNTA = ("pergunta", "fonte_esperada", "secao_esperada")
 
 
@@ -43,6 +43,9 @@ class ConjuntoTeste:
     limiar_hit_rate: float
     top_k: int
     perguntas: list[PerguntaTeste]
+    # Perguntas cuja resposta NÃO está no material. Não contam no hit rate:
+    # servem para calibrar a similaridade_minima (devem ficar abaixo dela).
+    fora_do_material: list[str] = field(default_factory=list)
 
 
 def normalizar(texto: str) -> str:
@@ -97,6 +100,13 @@ def validar(dados: Any, pasta: Path = PASTA_PADRAO) -> list[str]:
         erros.append(
             f"❌ {nome}: tem {len(perguntas)} pergunta(s); o mínimo é {MINIMO_PERGUNTAS}. "
             "Com poucas perguntas, uma só muda demais a taxa de acerto."
+        )
+
+    fora = dados.get("fora_do_material", [])
+    if not isinstance(fora, list) or not all(isinstance(f, str) and 5 <= len(f.strip()) <= 300 for f in fora):
+        erros.append(
+            f"❌ {nome}: `fora_do_material` deve ser uma lista de perguntas (textos de 5 a 300 caracteres), "
+            "cada uma começando com '- '."
         )
 
     titulos = _titulos_por_documento(pasta)
@@ -164,4 +174,5 @@ def carregar(caminho: Path | str = ARQUIVO_PADRAO, pasta: Path = PASTA_PADRAO) -
             PerguntaTeste(p["pergunta"].strip(), p["fonte_esperada"].strip(), p["secao_esperada"].strip())
             for p in dados["perguntas"]
         ],
+        fora_do_material=[f.strip() for f in dados.get("fora_do_material", [])],
     )

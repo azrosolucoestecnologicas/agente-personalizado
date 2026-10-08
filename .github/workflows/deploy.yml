@@ -61,7 +61,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: ruff check . --output-format=github
 
-      - name: "T1–T17: testes automáticos"
+      - name: "T1–T24: testes automáticos"
         if: ${{ !cancelled() }}
         run: python -m pytest -q
 
@@ -89,6 +89,53 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_SPACE: ${{ vars.HF_SPACE }}
         run: python scripts/publicar.py --conferir
+
+  # Parte 2: monta a coleção "teste" no Supabase e mede a busca (T25).
+  # Por enquanto só pelo botão "Run workflow" (tarefa 5). Nunca toca na "producao".
+  avaliar:
+    name: avaliar
+    needs: testes
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Um índice por vez: duas execuções juntas misturariam a coleção "teste".
+    concurrency:
+      group: indice-supabase
+      cancel-in-progress: false
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v5
+
+      - name: Instalar Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Instalar bibliotecas
+        run: pip install -r requirements.txt
+
+      # O modelo tem ~470 MB: guardado entre execuções para não baixar toda vez.
+      - name: Reaproveitar o modelo de embedding
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/modelos
+          key: modelos-e5-small-${{ hashFiles('requirements.txt') }}
+
+      - name: Indexar a coleção teste
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          FASTEMBED_CACHE_PATH: ${{ runner.temp }}/modelos
+        run: python scripts/indexar.py
+
+      - name: "T25: perguntas de teste na coleção teste"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          FASTEMBED_CACHE_PATH: ${{ runner.temp }}/modelos
+        run: python scripts/avaliar.py
 
   publicar:
     name: publicar
