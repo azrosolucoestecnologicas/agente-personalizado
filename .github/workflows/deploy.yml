@@ -118,10 +118,18 @@ jobs:
 
       # O modelo tem ~470 MB: guardado entre execuções para não baixar toda vez.
       - name: Reaproveitar o modelo de embedding
-        uses: actions/cache@v4
+        id: modelo
+        uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/modelos
           key: modelos-e5-small-${{ hashFiles('requirements.txt') }}
+
+      - name: Experimento de calibração (temporário)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          FASTEMBED_CACHE_PATH: ${{ runner.temp }}/modelos
+        run: python scripts/experimento.py
 
       - name: Indexar a coleção teste
         env:
@@ -136,6 +144,14 @@ jobs:
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           FASTEMBED_CACHE_PATH: ${{ runner.temp }}/modelos
         run: python scripts/avaliar.py
+
+      # Guarda o modelo mesmo quando a avaliação reprova (senão baixaria de novo).
+      - name: Guardar o modelo para a próxima execução
+        if: ${{ always() && steps.modelo.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/modelos
+          key: modelos-e5-small-${{ hashFiles('requirements.txt') }}
 
   publicar:
     name: publicar
