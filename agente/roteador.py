@@ -7,6 +7,10 @@ Regras (spec, RF12 a RF19):
 - se todos falharem, mostra o motivo de cada um;
 - nunca mostra nem registra chaves; o log não guarda o texto das perguntas.
 
+Parte 2 (RAG): com a base de conhecimento ligada, cada pergunta passa antes
+pelo agente/rag.py, que decide se busca no material, se responde "não
+encontrei" sem chamar o modelo ou se a base está indisponível.
+
 `responder(...)` devolve o texto ACUMULADO a cada pedaço, que é o formato
 que o chat do Gradio usa para mostrar a resposta palavra por palavra.
 """
@@ -20,6 +24,7 @@ from typing import Any
 from agente.config import Config
 from agente.erros import traduzir
 from agente.provedores import Mensagem, Pedido, Provedor
+from agente.rag import MSG_BASE_INDISPONIVEL, BaseRAG, bloco_fontes, e_nao_encontrado
 from agente.segredos import ocultar_chaves
 
 log = logging.getLogger("agente")
@@ -72,6 +77,7 @@ def responder(
     historico: Sequence[dict],
     config: Config,
     provedores: Sequence[Provedor],
+    rag: BaseRAG | None = None,
 ) -> Iterator[str]:
     pergunta = (pergunta or "").strip()
     if not pergunta:
@@ -84,13 +90,33 @@ def responder(
         yield MSG_SEM_CHAVE
         return
 
-    chaves = tuple(p.chave for p in provedores)
+    instrucoes, ultima, contexto = config.instrucoes, pergunta, None
+    if rag is not None and config.base_conhecimento.ativa:
+        contexto = rag.preparar(pergunta)
+        if contexto.tipo == "indisponivel":
+            yield MSG_BASE_INDISPONIVEL
+            return
+        if contexto.tipo == "nao_encontrado":
+            yield config.base_conhecimento.mensagem_nao_encontrado  # sem chamar o modelo (RF32)
+            return
+        instrucoes = f"{config.instrucoes.rstrip()}\n\n{contexto.regras}"
+        ultima = contexto.mensagem  # os trechos vão só com a pergunta atual (RF38)
+
     pedido = Pedido(
-        instrucoes=config.instrucoes,
-        mensagens=montar_mensagens(historico, pergunta, config.max_mensagens_historico),
+        instrucoes=instrucoes,
+        mensagens=montar_mensagens(historico, ultima, config.max_mensagens_historico),
         max_tokens=config.max_tokens,
         temperatura=config.temperatura,
     )
+    texto = yield from _transmitir(pedido, provedores, config)
+    if texto and contexto is not None and contexto.tipo == "material":
+        if not e_nao_encontrado(texto, config.base_conhecimento.mensagem_nao_encontrado):
+            yield texto + bloco_fontes(contexto.trechos)  # escritas pelo app, não pelo modelo (RF34)
+
+
+def _transmitir(pedido: Pedido, provedores: Sequence[Provedor], config: Config) -> Iterator[str]:
+    """Tenta a fila de provedores. Devolve (no return) o texto completo, ou "" se não terminou bem."""
+    chaves = tuple(p.chave for p in provedores)
     falhas: list[str] = []
 
     for provedor in provedores:
@@ -108,15 +134,16 @@ def responder(
                 # Já começou a responder: não troca de provedor (a resposta ficaria duplicada).
                 log.warning("%s interrompeu a resposta: %s", rotulo, motivo)
                 yield texto + msg_interrompida(motivo)
-                return
+                return ""
             log.warning("%s falhou antes de responder: %s. Tentando o próximo.", rotulo, motivo)
             falhas.append(f"• {rotulo}: {motivo}.")
             continue
         if texto:
             log.info("Resposta enviada por %s.", rotulo)
-            return
+            return texto
         log.warning("%s terminou sem enviar texto. Tentando o próximo.", rotulo)
         falhas.append(f"• {rotulo}: o provedor não devolveu nenhum texto.")
 
     mensagem = "\n".join([MSG_TODOS_FALHARAM, *falhas, "", MSG_TENTE_DE_NOVO])
     yield ocultar_chaves(mensagem, chaves)
+    return ""

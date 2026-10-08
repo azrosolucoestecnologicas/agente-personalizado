@@ -50,12 +50,19 @@ def _chat(app: gr.Blocks) -> gr.ChatInterface:
 
 
 def test_t15_app_py_importa_sem_chaves_e_sem_rede(monkeypatch):
-    for variavel in ("OPENROUTER_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"):
+    for variavel in (
+        "OPENROUTER_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "OPENAI_API_KEY",
+        "SUPABASE_URL",
+        "SUPABASE_PUBLISHABLE_KEY",
+    ):
         monkeypatch.delenv(variavel, raising=False)
     sys.modules.pop("app", None)
-    app = importlib.import_module("app")  # importar NÃO chama launch()
+    app = importlib.import_module("app")  # importar NÃO chama launch() nem baixa o modelo
     assert isinstance(app.demo, gr.Blocks)
     assert app.provedores == []
+    assert app.rag is not None and "SUPABASE_URL" in app.rag.motivo_indisponivel  # Parte 2: sem secrets, sem rede
     assert callable(app.exigencia_zerogpu)  # RF21: função @spaces.GPU presente
     assert "theme" in app.opcoes_launch and "css" in app.opcoes_launch
 

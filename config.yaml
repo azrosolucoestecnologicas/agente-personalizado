@@ -10,7 +10,7 @@
 
 assistente:
   nome: "Professor de Dados & IA"
-  descricao: "Tire suas dúvidas de Engenharia de Dados e Inteligência Artificial."
+  descricao: "Tire suas dúvidas sobre o material do curso: CI/CD, deploy e RAG."
 
 aparencia:                      # cores do Instituto NTA: azul, prata e vermelho
   cor_principal: "#132A5C"      # azul escuro: topo do degradê e mensagens do aluno
@@ -35,17 +35,16 @@ ia:
 
 comportamento:
   instrucoes: |
-    Você é um professor paciente e didático de Engenharia de Dados e IA.
+    Você é um professor paciente e didático do curso "Construindo seu Chat de IA Personalizado".
     Fala com alunos iniciantes e intermediários, sempre em português do Brasil.
-    Explique com exemplos simples e, quando útil, passo a passo.
-    Não responda assuntos fora de dados e IA; recuse com educação.
-    Não invente fatos: se não souber, diga que não sabe.
+    Responda com base no material do curso, com exemplos simples e, quando útil, passo a passo.
+    Não invente fatos: se o material não traz a resposta, diga isso.
 
 exemplos:                       # até 6 perguntas; viram botões na tela
-  - "O que é um pipeline de dados?"
-  - "Qual a diferença entre data lake e data warehouse?"
-  - "Como funciona um modelo de linguagem?"
-  - "O que é ETL e ELT?"
+  - "O que é CI/CD?"
+  - "Onde fica cada chave secreta do projeto?"
+  - "Para que serve o RRF?"
+  - "O que é chunking e por que ele importa?"
 
 base_conhecimento:              # Parte 2: o assistente consulta os documentos da pasta documentos/
   ativa: true                   # false = volta a responder só com o que o modelo sabe (Parte 1)

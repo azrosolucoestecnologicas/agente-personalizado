@@ -12,6 +12,7 @@ import sys
 from agente.config import ErroConfig, carregar_config
 from agente.interface import criar_app
 from agente.provedores import criar_provedores
+from agente.rag import criar_rag
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("agente")
@@ -40,7 +41,11 @@ if provedores:
 else:
     log.warning("Nenhuma chave de IA cadastrada: o chat vai explicar como cadastrar.")
 
-demo, opcoes_launch = criar_app(config, provedores)
+# Parte 2: carrega o modelo de embedding e conta os trechos da produção (RF37).
+# Sem os secrets do Supabase, o chat avisa que a base está indisponível.
+rag = criar_rag(config.base_conhecimento)
+
+demo, opcoes_launch = criar_app(config, provedores, rag)
 
 if __name__ == "__main__":
     demo.launch(**opcoes_launch)

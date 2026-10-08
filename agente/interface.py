@@ -15,13 +15,14 @@ import gradio as gr
 
 from agente.config import Config
 from agente.provedores import Provedor
+from agente.rag import BaseRAG
 from agente.roteador import responder
 
 # Textos fixos da tela (tudo em português).
 TEXTO_PLACEHOLDER = "Digite sua dúvida e pressione Enter…"
 TEXTO_ENVIAR = "Enviar"
 TEXTO_PARAR = "Parar"
-TEXTO_VAZIO = "### 👋 Olá!\nFaça uma pergunta ou clique em um dos exemplos abaixo."
+TEXTO_VAZIO = "### 👋 Olá!\nPergunte sobre o material do curso ou clique em um dos exemplos abaixo."
 MAX_CONVERSAS_SIMULTANEAS = 10  # RF20: protege contra sobrecarga e gasto excessivo
 
 # RF6: os botões internos do Gradio (Limpar, Tentar novamente...) seguem o idioma
@@ -207,11 +208,11 @@ def tema(config: Config) -> gr.themes.Base:
 # ---------------------------------------------------------------- app
 
 
-def criar_app(config: Config, provedores: Sequence[Provedor]) -> tuple[gr.Blocks, dict]:
+def criar_app(config: Config, provedores: Sequence[Provedor], rag: BaseRAG | None = None) -> tuple[gr.Blocks, dict]:
     """Monta a tela. Devolve o app e as opções para o `launch()`."""
 
     def conversar(mensagem: str, historico: list[dict]) -> Iterator[str]:
-        yield from responder(mensagem, historico, config, provedores)
+        yield from responder(mensagem, historico, config, provedores, rag)
 
     with gr.Blocks(title=config.nome) as app:
         gr.HTML(montar_cabecalho(config))
