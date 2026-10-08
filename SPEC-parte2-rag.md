@@ -17,7 +17,7 @@ Esta spec descreve **o que** será acrescentado e **como saberemos que ficou cer
 |---|---|
 | **RAG** | Antes de responder, o app **busca** os trechos certos do material e os entrega ao modelo junto com a pergunta. |
 | **Trecho (chunk)** | Pedaço de um documento, recortado pelos títulos, que é indexado e recuperado como unidade. |
-| **Embedding** | Lista de 384 números que representa o sentido de um texto. Textos parecidos geram vetores próximos. |
+| **Embedding** | Lista de 768 números que representa o sentido de um texto. Textos parecidos geram vetores próximos. |
 | **Busca por palavras** | Procura os termos da pergunta nos trechos (busca textual do Postgres, parecida com o BM25). |
 | **Busca por sentido** | Compara o embedding da pergunta com o de cada trecho (similaridade do cosseno). |
 | **RRF** | Junta as duas listas pela posição: cada trecho soma `peso / (60 + posição)` em cada lista. |
@@ -36,7 +36,7 @@ O assistente passa a responder **com base no material do curso** (as apostilas d
 ### 1.2 O que entra na Parte 2
 - Pasta `documentos/` só com arquivos `.md`, começando pelas duas apostilas convertidas dos PDFs.
 - Divisão em trechos **pela estrutura** (títulos), com o título repetido no início de cada trecho.
-- Embeddings com **`intfloat/multilingual-e5-small`**, gratuito, sem chave de API, rodando em CPU.
+- Embeddings com **`intfloat/multilingual-e5-base`**, gratuito, sem chave de API, rodando em CPU.
 - Banco vetorial no **Supabase** (Postgres + pgvector): tabela `trechos`, com as coleções `teste` e `producao`.
 - **Busca híbrida** (palavras + sentido, fundidas com RRF) feita **dentro do banco**, por uma função SQL.
 - Prompt com os trechos delimitados, a regra de responder só com eles e a de ignorar instruções escritas nos documentos.
@@ -59,13 +59,15 @@ O assistente passa a responder **com base no material do curso** (as apostilas d
 |---|---|---|---|
 | Documentos | Markdown (`.md`) em `documentos/` | Repositório | Revisados por commit, como código. |
 | Divisão em trechos | **Por estrutura** (títulos `#`, `##`, `###`), subdividindo seções longas com sobreposição | GitHub Actions | Seção 09 da apostila: título como metadado **e** repetido no início do texto. |
-| Modelo de embedding | **`intfloat/multilingual-e5-small`** (384 dimensões, multilíngue, ~470 MB) | Actions (trechos) e Space (pergunta) | **O mesmo modelo nos dois lados.** O e5 exige os prefixos `passage: ` nos trechos e `query: ` nas perguntas. Vetores normalizados. |
-| Biblioteca de embedding | **`fastembed`** (ONNX, sem PyTorch), com o e5-small registrado como modelo próprio (`onnx/model.onnx` do repositório oficial) | Actions e Space | Se o registro do ONNX falhar na tarefa 5, o plano B é a `sentence-transformers` (mais pesada). |
-| Banco vetorial | **Supabase** (Postgres 17 + **pgvector**, coluna `vector(384)`), plano gratuito, região São Paulo | Supabase | Busca **exata** (sem índice HNSW): com centenas de trechos, é rápida e sempre certa. |
+| Modelo de embedding | **`intfloat/multilingual-e5-base`** (768 dimensões, multilíngue, ~1,1 GB) | Actions (trechos) e Space (pergunta) | **O mesmo modelo nos dois lados.** O e5 exige os prefixos `passage: ` nos trechos e `query: ` nas perguntas. Vetores normalizados. |
+| Biblioteca de embedding | **`fastembed`** (ONNX, sem PyTorch), com o e5-base registrado como modelo próprio (`onnx/model.onnx` do repositório oficial) | Actions e Space | Se o registro do ONNX falhar na tarefa 5, o plano B é a `sentence-transformers` (mais pesada). |
+| Banco vetorial | **Supabase** (Postgres 17 + **pgvector**, coluna `vector(768)`), plano gratuito, região São Paulo | Supabase | Busca **exata** (sem índice HNSW): com centenas de trechos, é rápida e sempre certa. |
 | Busca por palavras | Busca textual do Postgres, configuração **português sem acentos** (`unaccent` + raiz das palavras) | Supabase | "funcao" acha "função"; "guardo" acha "guardar". Termos combinados com **OU**, para perguntas naturais. |
 | Fusão | **RRF** com k = 60 e pesos do `config.yaml` (peso zero desliga uma busca) | Supabase, dentro da função `buscar_hibrido` | Cada busca devolve até 20 candidatos. |
 | Acesso ao banco | API REST do Supabase (PostgREST) via `httpx` | Actions (grava) e Space (lê) | Sem SDK extra: o `httpx` já vem com o Gradio. |
 | Avaliação | `scripts/avaliar.py`: hit rate@k e MRR na coleção `teste` | Actions (job `avaliar`) | Determinística: mesmo índice e mesma pergunta dão o mesmo resultado. |
+
+> **Decisão da tarefa 5 (calibração com o banco de verdade):** o modelo escolhido no início, o `e5-small` (384 números), chegou a só **0,58** de hit rate@3 com as 12 perguntas de teste, e nenhuma combinação de tamanho de trecho, título do documento ou pesos passou de 0,67. Comparando modelos no mesmo índice: MiniLM 0,58; mpnet 0,67; `e5-base` **0,83** com `peso_palavras: 0.3`; reranker multilíngue 0,75, mas ~10 s por pergunta. Com a sua aprovação, o modelo passou a ser o **`e5-base` (768 números)**, com `peso_palavras: 0.3` e `similaridade_minima: 0.83` (trechos certos ≥ 0,836; perguntas fora do material ≤ 0,830).
 
 **Fluxo de uma pergunta no Space**
 1. Cumprimento ou pergunta sobre o uso do assistente → responde sem buscar (RF31).
@@ -90,7 +92,7 @@ agente-personalizado/
 │   └── esquema.sql                     🆕 tabela, busca híbrida, promoção e permissões
 ├── agente/
 │   ├── documentos.py                   🆕 lê e valida a pasta documentos/; divide em trechos
-│   ├── embeddings.py                   🆕 carrega o e5-small (fastembed) e gera vetores
+│   ├── embeddings.py                   🆕 carrega o e5-base (fastembed) e gera vetores
 │   ├── banco.py                        🆕 conversa com o Supabase (buscar, contar, gravar, promover)
 │   ├── rag.py                          🆕 monta o contexto: busca, filtra, ordena, prompt e fontes
 │   ├── config.py                       ✏️ novo bloco base_conhecimento
@@ -127,7 +129,7 @@ agente-personalizado/
 ```yaml
 base_conhecimento:
   ativa: true                          # false = volta ao comportamento da Parte 1
-  modelo_embedding: "intfloat/multilingual-e5-small"
+  modelo_embedding: "intfloat/multilingual-e5-base"
   tamanho_trecho: 1500                 # máximo de caracteres por trecho (~350 tokens)
   sobreposicao: 200                    # caracteres repetidos ao subdividir seções longas
   trechos_por_resposta: 4              # quantos trechos vão para o modelo (top-k)
@@ -143,7 +145,7 @@ base_conhecimento:
 |---|---|---|---|
 | `base_conhecimento` | Não | Seção com os campos abaixo | Ausente = `ativa: false` (Parte 1 pura) |
 | `base_conhecimento.ativa` | Não | `true` ou `false` | `true` (se a seção existir) |
-| `base_conhecimento.modelo_embedding` | Não | `intfloat/multilingual-e5-small` ou `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` (os dois têm 384 dimensões, o tamanho da coluna no banco) | `intfloat/multilingual-e5-small` |
+| `base_conhecimento.modelo_embedding` | Não | `intfloat/multilingual-e5-base` ou `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` (os dois têm 768 dimensões, o tamanho da coluna no banco) | `intfloat/multilingual-e5-base` |
 | `base_conhecimento.tamanho_trecho` | Não | Inteiro de 300 a 3000 (caracteres) | `1500` |
 | `base_conhecimento.sobreposicao` | Não | Inteiro de 0 até metade do `tamanho_trecho` | `200` (~13%, dentro dos 10–20% da apostila) |
 | `base_conhecimento.trechos_por_resposta` | Não | Inteiro de 1 a 10 | `4` (apostila: 3 a 5) |
@@ -218,7 +220,7 @@ base_conhecimento:
 | **T21** | job `testes` | `perguntas_teste.yaml` é válido: limiar entre 0 e 1, `top_k` de 1 a 10, ≥ 5 perguntas, e cada `fonte_esperada` **existe** em `documentos/` e tem uma seção que contém `secao_esperada` | Pergunta apontando para arquivo ou seção inexistente |
 | **T22** | job `testes` | Nenhuma chave **secreta** do Supabase (`sb_secret_…` ou JWT com papel `service_role`) nos arquivos nem no histórico (amplia o T8) | Chave que grava commitada |
 | **T23** | job `testes` (busca e modelo simulados) | Montagem do RAG: frase exata sem chamar o modelo quando nada é relevante; cumprimento sem busca; trechos delimitados; instrução contra injeção no prompt; fontes escritas pelo app; "base indisponível" quando o banco falha; ordem dos trechos | Regressões no comportamento do RAG |
-| **T24** | job `testes` | `supabase/esquema.sql`: `vector(384)` bate com a dimensão do modelo do config; RLS ligada; papel anônimo só com `SELECT` em `producao` e `EXECUTE` em `buscar_hibrido`; `promover_teste` sem permissão para o anônimo | Dimensão errada, permissão aberta demais |
+| **T24** | job `testes` | `supabase/esquema.sql`: `vector(768)` bate com a dimensão do modelo do config; RLS ligada; papel anônimo só com `SELECT` em `producao` e `EXECUTE` em `buscar_hibrido`; `promover_teste` sem permissão para o anônimo | Dimensão errada, permissão aberta demais |
 | **T25** | job `avaliar` (com banco e modelo) | Hit rate@k das perguntas de teste **na coleção `teste`** ≥ `limiar_hit_rate`. Relatório com MRR, posição de cada pergunta e o que veio no lugar quando errou | Busca piorou (chunking, modelo ou documento ruim) |
 
 T18 a T24 rodam em segundos, sem rede. O T25 precisa do banco e do modelo, por isso tem um job próprio.
@@ -232,7 +234,7 @@ push (qualquer branch) ──► job "testes"   T1–T24 (sem rede)
                                │ passou?   não ──► ❌ para. Nada muda: banco e Space intactos.
                                ▼ (só na main, ou botão manual)
                            job "avaliar"
-                             1. instala bibliotecas e baixa o e5-small (com cache)
+                             1. instala bibliotecas e baixa o e5-base (com cache)
                              2. indexar.py → apaga e regrava a coleção "teste"
                              3. avaliar.py → perguntas de teste na coleção "teste" (T25)
                                │ passou?   não ──► ❌ para. "producao" NÃO é tocada;
@@ -249,7 +251,7 @@ Detalhes:
 - **Botão "Run workflow" em outra branch:** roda `testes` + `avaliar` (sem publicar). Serve para testar mudanças de chunking ou de perguntas sem tocar na `producao`.
 - **Uma execução por vez no banco:** `avaliar` e `publicar` compartilham o grupo de `concurrency` `indice-supabase`, para dois pushes não misturarem a coleção `teste`.
 - **Ordem no `publicar`:** promover primeiro, enviar o código depois. Se o envio ao Space falhar, a `producao` nova continua compatível com o código anterior, porque o formato da tabela é o mesmo.
-- **Cache do modelo** (`actions/cache`), para não baixar ~470 MB a cada execução.
+- **Cache do modelo** (`actions/cache`), para não baixar ~1,1 GB a cada execução.
 - **Configuração manual nova** (uma vez):
   - criar o projeto no Supabase e rodar o `esquema.sql`. Eu faço isso pelo conector do Supabase, com a sua autorização;
   - cadastrar os secrets:
@@ -284,7 +286,7 @@ create table if not exists public.trechos (
   secao       text not null,              -- ex.: 09 Chunking: dividir para achar
   ordem       int  not null,              -- posição do trecho dentro do documento
   conteudo    text not null,              -- texto do trecho (começa com o título da seção)
-  embedding   vector(384) not null,       -- e5-small: 384 dimensões, normalizado
+  embedding   vector(768) not null,       -- e5-base: 768 dimensões, normalizado
   modelo      text not null,              -- modelo que gerou o vetor
   texto_busca tsvector generated always as (to_tsvector('pt_sem_acento', conteudo)) stored,
   criado_em   timestamptz not null default now()
@@ -296,7 +298,7 @@ create index if not exists trechos_texto_busca_idx on public.trechos using gin (
 -- Busca híbrida: palavras + sentido, fundidas com RRF (seção 12 da apostila).
 create or replace function public.buscar_hibrido(
   consulta text,
-  consulta_embedding vector(384),
+  consulta_embedding vector(768),
   quantidade int default 4,
   peso_palavras float default 1.0,
   peso_sentido float default 1.0,
@@ -442,7 +444,7 @@ perguntas:
 | `Invalid API key` / 401 no Actions | Secret com outro nome, ou chave publicável no lugar da secreta | Conferir `SUPABASE_SECRET_KEY` no GitHub, letra por letra |
 | Space responde "não encontrei" para tudo | Coleção `producao` vazia (a promoção nunca rodou) ou `similaridade_minima` alta demais | Ver o log do job publicar e o Table Editor; baixar o limiar com base no relatório do avaliar |
 | Chat diz que a base está indisponível | Secrets do Supabase ausentes no Space, ou projeto **pausado** (o plano gratuito pausa após ~7 dias sem uso) | Cadastrar os secrets; no painel do Supabase, clicar em **Restore project** |
-| `expected 384 dimensions` | Modelo de embedding trocado por outro de tamanho diferente | Voltar ao modelo padrão, ou mudar `vector(384)` no SQL e reindexar |
+| `expected 768 dimensions` | Modelo de embedding trocado por outro de tamanho diferente | Voltar ao modelo padrão, ou mudar `vector(768)` no SQL e reindexar |
 | Assistente responde o que não está no material | Similaridade mínima baixa demais | Subir `similaridade_minima` e conferir no relatório |
 | Primeira pergunta demora | O modelo de embedding está sendo baixado ou carregado no Space | Normal após reiniciar; as seguintes são rápidas |
 | Portão barra no T22 | Chave secreta do Supabase colada num arquivo | Apagar, **revogar no painel do Supabase** e gerar outra |

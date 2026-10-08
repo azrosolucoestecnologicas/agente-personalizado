@@ -52,7 +52,7 @@ base_conhecimento:              # Parte 2: o assistente consulta os documentos d
   tamanho_trecho: 1500          # máximo de caracteres por trecho (300 a 3000; ~350 tokens)
   sobreposicao: 200             # caracteres repetidos ao subdividir seções longas (até metade do trecho)
   trechos_por_resposta: 4       # quantos trechos vão para o modelo (1 a 10; a apostila sugere 3 a 5)
-  peso_palavras: 1.0            # peso da busca por palavras no RRF (0 desliga)
+  peso_palavras: 0.3            # peso da busca por palavras no RRF (0 desliga; calibrado: 0.3 deu o melhor hit rate)
   peso_sentido: 1.0             # peso da busca por sentido no RRF (0 desliga)
-  similaridade_minima: 0.80     # abaixo disso o trecho é descartado (provisório: calibrado na tarefa 5)
+  similaridade_minima: 0.83     # abaixo disso o trecho é descartado (calibrado: certos ≥ 0.836; fora do material ≤ 0.830)
   mensagem_nao_encontrado: "Não encontrei isso no material do curso."
