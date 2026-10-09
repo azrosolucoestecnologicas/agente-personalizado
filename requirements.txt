@@ -7,6 +7,10 @@ openai==3.19.2
 # Embeddings (Parte 2): ONNX, sem PyTorch. Mesmo modelo no Actions e no Space.
 fastembed==0.8.1
 httpx==0.28.1   # conversa com o Supabase (a mesma versão que o gradio usa)
+# Servidor da Parte 3 (API + interface num endereço só).
+fastapi==0.141.1
+uvicorn==0.53.0
+pydantic==2.13.5   # validação dos pedidos da API (o FastAPI usa)
 # 'spaces' fica sem versão: no hardware ZeroGPU o Hugging Face já traz a
 # versão certa, e fixar outra poderia atrapalhar.
 spaces

@@ -11,14 +11,17 @@ Parte 2 (RAG): com a base de conhecimento ligada, cada pergunta passa antes
 pelo agente/rag.py, que decide se busca no material, se responde "não
 encontrei" sem chamar o modelo ou se a base está indisponível.
 
-`responder(...)` devolve o texto ACUMULADO a cada pedaço, que é o formato
-que o chat do Gradio usa para mostrar a resposta palavra por palavra.
+Parte 3: `eventos(...)` é o coração. Devolve, em ordem, eventos tipados
+(fontes, texto, fim ou erro), que o servidor (agente/servidor.py) manda ao
+navegador em SSE. `responder(...)` monta, a partir dos mesmos eventos, o
+texto ACUMULADO que o chat do Gradio usava.
 """
 
 from __future__ import annotations
 
 import logging
 from collections.abc import Iterator, Sequence
+from dataclasses import dataclass, field
 from typing import Any
 
 from agente.config import Config
@@ -72,33 +75,58 @@ def montar_mensagens(historico: Sequence[dict], pergunta: str, max_historico: in
     return [*anteriores, {"role": "user", "content": pergunta}]
 
 
-def responder(
+@dataclass(frozen=True)
+class Evento:
+    """Um pedaço da resposta. tipo: "fontes", "texto", "fim" ou "erro" (contrato da spec da Parte 3, 5.4)."""
+
+    tipo: str
+    dados: dict[str, Any] = field(default_factory=dict)
+
+
+def _erro(tipo: str, mensagem: str) -> Evento:
+    return Evento("erro", {"tipo": tipo, "mensagem": mensagem})
+
+
+def eventos(
     pergunta: str,
     historico: Sequence[dict],
     config: Config,
     provedores: Sequence[Provedor],
     rag: BaseRAG | None = None,
-) -> Iterator[str]:
+) -> Iterator[Evento]:
     pergunta = (pergunta or "").strip()
     if not pergunta:
         return
     if len(pergunta) > config.max_caracteres_pergunta:
-        yield msg_pergunta_longa(len(pergunta), config.max_caracteres_pergunta)
+        yield _erro("pergunta_longa", msg_pergunta_longa(len(pergunta), config.max_caracteres_pergunta))
         return
     if not provedores:
         log.warning("Nenhum provedor com chave cadastrada.")
-        yield MSG_SEM_CHAVE
+        yield _erro("sem_chave", MSG_SEM_CHAVE)
         return
 
     instrucoes, ultima, contexto = config.instrucoes, pergunta, None
     if rag is not None and config.base_conhecimento.ativa:
         contexto = rag.preparar(pergunta)
         if contexto.tipo == "indisponivel":
-            yield MSG_BASE_INDISPONIVEL
+            yield _erro("base_indisponivel", MSG_BASE_INDISPONIVEL)
             return
         if contexto.tipo == "nao_encontrado":
-            yield config.base_conhecimento.mensagem_nao_encontrado  # sem chamar o modelo (RF32)
+            # A frase exata, sem chamar o modelo (RF32).
+            yield Evento("texto", {"delta": config.base_conhecimento.mensagem_nao_encontrado})
+            yield Evento("fim", {"nao_encontrado": True})
             return
+        if contexto.tipo == "material":
+            # As fontes saem antes do texto: a busca acontece antes da geração.
+            yield Evento(
+                "fontes",
+                {
+                    "fontes": [
+                        {"n": n, "fonte": t.fonte, "secao": t.secao, "trecho": t.conteudo}
+                        for n, t in enumerate(contexto.trechos, start=1)
+                    ]
+                },
+            )
         instrucoes = f"{config.instrucoes.rstrip()}\n\n{contexto.regras}"
         ultima = contexto.mensagem  # os trechos vão só com a pergunta atual (RF38)
 
@@ -109,12 +137,33 @@ def responder(
         temperatura=config.temperatura,
     )
     texto = yield from _transmitir(pedido, provedores, config)
-    if texto and contexto is not None and contexto.tipo == "material":
-        if not e_nao_encontrado(texto, config.base_conhecimento.mensagem_nao_encontrado):
-            yield texto + bloco_fontes(contexto.trechos)  # escritas pelo app, não pelo modelo (RF34)
+    if texto:
+        nao_encontrado = e_nao_encontrado(texto, config.base_conhecimento.mensagem_nao_encontrado)
+        yield Evento("fim", {"nao_encontrado": bool(contexto is not None and nao_encontrado)})
 
 
-def _transmitir(pedido: Pedido, provedores: Sequence[Provedor], config: Config) -> Iterator[str]:
+def responder(
+    pergunta: str,
+    historico: Sequence[dict],
+    config: Config,
+    provedores: Sequence[Provedor],
+    rag: BaseRAG | None = None,
+) -> Iterator[str]:
+    """Texto acumulado a cada pedaço, com as fontes escritas pelo app no fim (formato do chat Gradio)."""
+    texto, fontes = "", []
+    for evento in eventos(pergunta, historico, config, provedores, rag):
+        if evento.tipo == "fontes":
+            fontes = evento.dados["fontes"]
+        elif evento.tipo == "texto":
+            texto += evento.dados["delta"]
+            yield texto
+        elif evento.tipo == "erro":
+            yield texto + evento.dados["mensagem"] if texto else evento.dados["mensagem"]
+        elif evento.tipo == "fim" and fontes and not evento.dados["nao_encontrado"]:
+            yield texto + bloco_fontes(fontes)  # escritas pelo app, não pelo modelo (RF34)
+
+
+def _transmitir(pedido: Pedido, provedores: Sequence[Provedor], config: Config) -> Iterator[Evento]:
     """Tenta a fila de provedores. Devolve (no return) o texto completo, ou "" se não terminou bem."""
     chaves = tuple(p.chave for p in provedores)
     falhas: list[str] = []
@@ -127,13 +176,13 @@ def _transmitir(pedido: Pedido, provedores: Sequence[Provedor], config: Config) 
                 if not pedaco:
                     continue
                 texto += pedaco
-                yield texto
+                yield Evento("texto", {"delta": pedaco})
         except Exception as erro:  # noqa: BLE001 - qualquer falha do provedor vira mensagem amigável
             motivo = traduzir(erro, config.tempo_limite_segundos, chaves)
             if texto:
                 # Já começou a responder: não troca de provedor (a resposta ficaria duplicada).
                 log.warning("%s interrompeu a resposta: %s", rotulo, motivo)
-                yield texto + msg_interrompida(motivo)
+                yield _erro("interrompida", msg_interrompida(motivo))
                 return ""
             log.warning("%s falhou antes de responder: %s. Tentando o próximo.", rotulo, motivo)
             falhas.append(f"• {rotulo}: {motivo}.")
@@ -145,5 +194,5 @@ def _transmitir(pedido: Pedido, provedores: Sequence[Provedor], config: Config) 
         falhas.append(f"• {rotulo}: o provedor não devolveu nenhum texto.")
 
     mensagem = "\n".join([MSG_TODOS_FALHARAM, *falhas, "", MSG_TENTE_DE_NOVO])
-    yield ocultar_chaves(mensagem, chaves)
+    yield _erro("provedores", ocultar_chaves(mensagem, chaves))
     return ""

@@ -181,7 +181,12 @@ def do_ambiente(nome_chave: str, ambiente: Mapping[str, str] | None = None) -> B
     faltando = [n for n in ("SUPABASE_URL", nome_chave) if not ambiente.get(n, "").strip()]
     if faltando:
         raise ErroBanco(
-            f"Faltam as variáveis {', '.join(faltando)}. No GitHub, cadastre-as em "
-            "Settings → Secrets and variables → Actions."
+            f"Faltam as variáveis {', '.join(faltando)}. "
+            + (
+                "No GitHub, cadastre-as em Settings → Secrets and variables → Actions."
+                if nome_chave == "SUPABASE_SECRET_KEY"
+                else "Cadastre-as nas variáveis do servidor (Space: Settings → Variables and secrets; "
+                "Railway: serviço → Variables)."
+            )
         )
     return Banco(ambiente["SUPABASE_URL"], ambiente[nome_chave].strip())

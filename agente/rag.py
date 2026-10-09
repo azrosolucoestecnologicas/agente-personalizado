@@ -19,6 +19,7 @@ import os
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from typing import Any
 
 from agente.banco import Banco, ErroBanco, Resultado, do_ambiente
 from agente.config import BaseConhecimento
@@ -129,11 +130,15 @@ def montar_mensagem(pergunta: str, trechos: Sequence[Resultado], mensagem_nao_en
     )
 
 
-def bloco_fontes(trechos: Sequence[Resultado]) -> str:
-    """'Fontes consultadas', uma linha por fonte + seção, sem repetir (RF34)."""
+def bloco_fontes(trechos: Sequence[Resultado | Mapping[str, Any]]) -> str:
+    """'Fontes consultadas', uma linha por fonte + seção, sem repetir (RF34).
+
+    Aceita os trechos da busca ou as fontes do evento "fontes" (dicionários).
+    """
     vistas: list[str] = []
     for t in trechos:
-        linha = f"- {t.fonte} › {t.secao}"
+        fonte, secao = (t["fonte"], t["secao"]) if isinstance(t, Mapping) else (t.fonte, t.secao)
+        linha = f"- {fonte} › {secao}"
         if linha not in vistas:
             vistas.append(linha)
     return "\n\n**Fontes consultadas:**\n" + "\n".join(vistas)

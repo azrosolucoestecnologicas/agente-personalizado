@@ -57,6 +57,7 @@ ESTRUTURA: dict[str, Any] = {
         "similaridade_minima": None,
         "mensagem_nao_encontrado": None,
     },
+    "servidor": {"perguntas_por_minuto": None, "perguntas_por_dia": None},
 }
 
 # Modelos de embedding aceitos -> dimensão do vetor. Todos precisam ter a mesma
@@ -100,6 +101,14 @@ class BaseConhecimento:
 
 
 @dataclass(frozen=True)
+class Servidor:
+    """Bloco servidor do config.yaml (Parte 3): limites de uso por visitante (IP)."""
+
+    perguntas_por_minuto: int = 10
+    perguntas_por_dia: int = 100
+
+
+@dataclass(frozen=True)
 class Config:
     nome: str
     descricao: str
@@ -117,6 +126,7 @@ class Config:
     exemplos: list[str] = field(default_factory=list)
     cor_destaque: str = ""  # botões e detalhes; vazio = usa a cor_principal
     base_conhecimento: BaseConhecimento = field(default_factory=BaseConhecimento)
+    servidor: Servidor = field(default_factory=Servidor)
 
 
 # ------------------------------------------------------------------ leitura
@@ -172,9 +182,9 @@ def ler_yaml(caminho: Path) -> Any:
         raise ErroConfig([f"❌ YAML inválido{onde}: {detalhe}. {dica}"]) from None
 
 
-def carregar_config(caminho: Path | str = ARQUIVO_PADRAO) -> Config:
+def carregar_config(caminho: Path | str | None = None) -> Config:
     """Lê e valida o config.yaml. Levanta ErroConfig com todos os problemas encontrados."""
-    caminho = Path(caminho)
+    caminho = Path(caminho if caminho is not None else ARQUIVO_PADRAO)
     dados = ler_yaml(caminho)
     erros = validar(dados, caminho.resolve().parent)
     if erros:
@@ -229,7 +239,26 @@ def validar(dados: Any, raiz: Path) -> list[str]:
     # base de conhecimento (Parte 2): opcional
     if dados.get("base_conhecimento") is not None:
         _base_conhecimento(dados["base_conhecimento"], erros)
+
+    # servidor (Parte 3): opcional
+    if dados.get("servidor") is not None:
+        _servidor(dados["servidor"], erros)
     return erros
+
+
+def _servidor(servidor: Any, erros: list[str]) -> None:
+    """Limites de uso: valem no servidor, não só na tela."""
+    if not isinstance(servidor, dict):
+        erros.append("❌ `servidor`: deve conter campos recuados abaixo dele (2 espaços).")
+        return
+    _inteiro(servidor, "servidor.perguntas_por_minuto", 1, 120, erros)
+    _inteiro(servidor, "servidor.perguntas_por_dia", 1, 10000, erros)
+    por_minuto, por_dia = servidor.get("perguntas_por_minuto"), servidor.get("perguntas_por_dia")
+    if _eh_inteiro(por_minuto) and _eh_inteiro(por_dia) and por_dia < por_minuto:
+        erros.append(
+            f"❌ `servidor.perguntas_por_dia` ({por_dia}) é menor que `perguntas_por_minuto` ({por_minuto}). "
+            "O limite do dia precisa ser pelo menos o do minuto."
+        )
 
 
 def _base_conhecimento(base: Any, erros: list[str]) -> None:
@@ -500,6 +529,9 @@ def _montar(dados: dict, raiz: Path) -> Config:
         instrucoes=c["instrucoes"].strip(),
         exemplos=[e.strip() for e in dados.get("exemplos") or []],
         base_conhecimento=_montar_base(dados.get("base_conhecimento")),
+        servidor=Servidor(
+            **{campo: valor for campo, valor in (dados.get("servidor") or {}).items() if valor is not None}
+        ),
     )
 
 

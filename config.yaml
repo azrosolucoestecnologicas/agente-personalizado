@@ -56,3 +56,7 @@ base_conhecimento:              # Parte 2: o assistente consulta os documentos d
   peso_sentido: 1.0             # peso da busca por sentido no RRF (0 desliga)
   similaridade_minima: 0.83     # abaixo disso o trecho é descartado (calibrado: certos ≥ 0.836; fora do material ≤ 0.830)
   mensagem_nao_encontrado: "Não encontrei isso no material do curso."
+
+servidor:                       # Parte 3: proteção contra abuso (vale no servidor, não só na tela)
+  perguntas_por_minuto: 10      # por visitante (IP); 1 a 120
+  perguntas_por_dia: 100        # por visitante (IP); 1 a 10000; zera à meia-noite UTC
